@@ -67,7 +67,7 @@ Escopo: `browser::cdp` (launch/cascata de args, sanitização de env, low-memory
 
 ## Fase 3 — Check-in (1,5–2 semanas)
 
-**Status: em andamento (2026-09-28).** Concluído: parsers de saldo/streak/extrato (`flows::balance`) com paridade em fixtures do oráculo. Pendentes: histórico de streak no desktop, `login` (slider/2FA fail-fast), orquestração do `checkin` e smoke real.
+**Status: concluída com validação real (2026-09-28).** Parsers, login (SPA in-page com botão visível), orquestração do `checkin` e CLI validados contra o AliExpress real: run 1 coletou o check-in (exit 0) e run 2 confirmou `alreadyCollected` (exit 2). Evidências em `docs/06-validacao-real.md`. Pendências finas: saldo/ledger do desktop (D-08) e slider (D-07).
 
 Escopo: `flows::login`, `balance`, `checkin` + `ui::navigation` (goto/retry/closeModals/slider).
 
