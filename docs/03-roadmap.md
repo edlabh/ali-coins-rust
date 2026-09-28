@@ -28,7 +28,7 @@ Depende de: `docs/01-avaliacao.md`, `docs/02-arquitetura.md`, `docs/adr/` (ADR-0
 
 Escopo: `core::config`, `crypto`, `session`, `lock`, `logging`, `time`, `report`, `notify`, `exit`; subcomando `--dry-run` funcional; `export-session`/`import-session` completos.
 
-**Status: em andamento (2026-09-28).** Concluído: `crypto` v1/v2/v3 + `secure_fs` (interop bidirecional) e `config`/env + subcomando `--dry-run [--json]` com paridade em 5 cenários (default, multi-conta, tunado, pausas inválidas, secret ausente). Pendentes: `session`, `lock`, `logging`/`exit`, `time`, `report`, `notify`/SSRF e `export-session`/`import-session`.
+**Status: em andamento (2026-09-28).** Concluído: `crypto` v1/v2/v3 + `secure_fs` (interop bidirecional), `config`/env + subcomando `--dry-run [--json]` (paridade em 5 cenários) e `session` (paths, load/save, migração v1/v2→v3, rotação, meta, storage filter, backup/prune) com fixtures do oráculo. Pendentes: `lock`, `logging`/`exit`, `time`, `report`, `notify`/SSRF e `export-session`/`import-session`.
 
 **Entregáveis**
 - Parser de env com tabela declarativa + mensagens PT-BR; `credentials.env`/`accounts.json`; paths/hash por conta.

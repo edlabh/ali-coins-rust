@@ -9,6 +9,7 @@
 pub mod config;
 pub mod crypto;
 pub mod secure_fs;
+pub mod session;
 
 /// Versão do crate, herdada do workspace.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

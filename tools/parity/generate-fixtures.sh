@@ -15,5 +15,6 @@ export ORACLE_COMMIT="$(git -C "$REF" rev-parse HEAD 2>/dev/null || true)"
 
 node "$ROOT/tools/parity/node/gen_tokens.mjs"
 node "$ROOT/tools/parity/node/gen_dry_run.mjs"
+node "$ROOT/tools/parity/node/gen_storage_filter.mjs"
 
 echo "Fixtures geradas em tools/parity/fixtures/ (oráculo: ${ORACLE_COMMIT:-desconhecido})"
