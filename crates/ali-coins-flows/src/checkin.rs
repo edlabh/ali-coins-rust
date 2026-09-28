@@ -98,6 +98,10 @@ pub struct CheckinResult {
     pub total_balance: Option<String>,
 }
 
+fn log_info(message: &str) {
+    ali_coins_core::logging::global().info(message, &[]);
+}
+
 async fn first_present(page: &dyn Page, candidates: &[&str], timeout: Duration) -> Option<String> {
     for candidate in candidates {
         if page.wait_for_selector(candidate, timeout).await.is_ok() {
@@ -131,6 +135,10 @@ pub async fn run_checkin(
     options: &CheckinOptions,
 ) -> Result<CheckinResult, CheckinError> {
     goto_with_retry(page, &mobile_coin_url()).await?;
+    log_info(&format!(
+        "Página do check-in carregada: {}",
+        page.url().await.unwrap_or_default()
+    ));
 
     // Login quando a página pedir credenciais.
     let needs_login = first_present(
@@ -144,6 +152,7 @@ pub async fn run_checkin(
     )
     .await
     .is_some();
+    log_info(&format!("Formulário de login visível: {needs_login}"));
     if needs_login {
         run_login(page, user, password, &options.login).await?;
     } else if !has_auth_cookies(page).await? {
@@ -160,6 +169,9 @@ pub async fn run_checkin(
         .is_some();
 
     let mut collected = false;
+    log_info(&format!(
+        "Tentando coleta (já coletado: {already_collected})"
+    ));
     if !already_collected {
         if let Some(button) =
             first_present(page, &selectors::COLLECT_BUTTONS, options.detect_timeout).await
@@ -171,9 +183,19 @@ pub async fn run_checkin(
         }
     }
 
-    let content = page.content().await.unwrap_or_default();
+    // O oráculo lê o texto visível (innerText); o HTML não contém os rótulos.
+    let content = page
+        .eval_raw("document.body ? document.body.innerText : ''")
+        .await
+        .ok()
+        .and_then(|value| value.as_str().map(str::to_string))
+        .filter(|text| !text.is_empty())
+        .unwrap_or_default();
     let streak_days = extract_streak_from_text(&content);
     let total_balance = parse_total_balance(&content);
+    log_info(&format!(
+        "Leitura final: streak={streak_days:?} saldo={total_balance:?}"
+    ));
 
     Ok(CheckinResult {
         already_collected,
@@ -218,7 +240,11 @@ mod tests {
         let (driver, page) = page_with(MockPageSpec {
             visible_selectors: vec!["[class*=\"today-checked\"]".to_string()],
             storage_state: Some(auth_state()),
-            content: "<html>Minhas moedas 1.234 Sequência de 42 dias</html>".to_string(),
+            content: "<html></html>".to_string(),
+            eval_contains: vec![(
+                "document.body ? document.body.innerText".to_string(),
+                serde_json::json!("Minhas moedas 1.234 Sequência de 42 dias"),
+            )],
             ..MockPageSpec::default()
         })
         .await;

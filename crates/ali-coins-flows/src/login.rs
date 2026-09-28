@@ -9,7 +9,7 @@
 
 use ali_coins_browser::driver::{BrowserError, Page};
 use serde_json::Value;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use thiserror::Error;
 
 /// Seletores de login do oráculo (subconjunto sem `:has-text`, que exige JS).
@@ -87,6 +87,8 @@ pub struct LoginOptions {
     pub cookie_retry_delay: Duration,
     /// Timeout curto de detecção de cada seletor.
     pub detect_timeout: Duration,
+    /// Espera máxima pelo campo de senha após o envio do usuário (SPA).
+    pub password_wait_timeout: Duration,
 }
 
 impl Default for LoginOptions {
@@ -96,6 +98,7 @@ impl Default for LoginOptions {
             cookie_attempts: 5,
             cookie_retry_delay: Duration::from_secs(1),
             detect_timeout: Duration::from_millis(300),
+            password_wait_timeout: Duration::from_secs(15),
         }
     }
 }
@@ -109,6 +112,10 @@ pub enum LoginOutcome {
     TwoFactorRequired,
 }
 
+fn log_info(message: &str) {
+    ali_coins_core::logging::global().info(message, &[]);
+}
+
 async fn first_present(page: &dyn Page, candidates: &[&str], timeout: Duration) -> Option<String> {
     for candidate in candidates {
         if page.wait_for_selector(candidate, timeout).await.is_ok() {
@@ -116,6 +123,43 @@ async fn first_present(page: &dyn Page, candidates: &[&str], timeout: Duration) 
         }
     }
     None
+}
+
+/// Clica no primeiro elemento VISÍVEL de cada seletor (ignora botões ocultos).
+async fn click_visible(page: &dyn Page, candidates: &[&str]) -> Option<String> {
+    for candidate in candidates {
+        let script = format!(
+            "(() => {{ const els = document.querySelectorAll({}); \
+             for (const el of els) {{ const r = el.getBoundingClientRect(); \
+             if (r.width > 0 && r.height > 0 && el.offsetParent !== null) {{ el.click(); return true; }} }} \
+             return false; }})()",
+            serde_json::to_string(candidate).unwrap_or_default()
+        );
+        let clicked = page
+            .eval_raw(&script)
+            .await
+            .ok()
+            .and_then(|value| value.as_bool())
+            .unwrap_or(false);
+        if clicked {
+            return Some((*candidate).to_string());
+        }
+    }
+    None
+}
+
+/// Aguarda qualquer um dos seletores até o deadline, re-testando em ciclos curtos.
+async fn wait_for_any(page: &dyn Page, candidates: &[&str], timeout: Duration) -> Option<String> {
+    let deadline = Instant::now() + timeout;
+    loop {
+        if let Some(found) = first_present(page, candidates, Duration::from_millis(300)).await {
+            return Some(found);
+        }
+        if Instant::now() >= deadline {
+            return None;
+        }
+        tokio::time::sleep(Duration::from_millis(150)).await;
+    }
 }
 
 /// Preenche um input com eventos `input/change` (aceita React/Vue).
@@ -182,25 +226,73 @@ pub async fn run_login(
     password: &str,
     options: &LoginOptions,
 ) -> Result<LoginOutcome, LoginError> {
+    log_info("Iniciando fluxo de login.");
     // 1. Usuário (fluxo completo) — ausente no SPA que pede só senha.
-    if let Some(username_selector) =
-        first_present(page, &selectors::USERNAME_INPUTS, options.detect_timeout).await
+    if let Some(username_selector) = wait_for_any(
+        page,
+        &selectors::USERNAME_INPUTS,
+        options.password_wait_timeout,
+    )
+    .await
     {
+        log_info(&format!("Campo de usuário detectado: {username_selector}"));
         fill_input(page, &username_selector, user).await?;
         press_enter(page, &username_selector).await?;
     }
 
-    // 2. Senha.
-    if let Some(password_selector) =
-        first_present(page, &selectors::PASSWORD_INPUTS, options.detect_timeout).await
-    {
-        fill_input(page, &password_selector, password).await?;
+    // 2. Senha (o SPA pode revelar o campo após um round-trip).
+    let mut password_selector = wait_for_any(
+        page,
+        &selectors::PASSWORD_INPUTS,
+        options.password_wait_timeout,
+    )
+    .await;
+    if password_selector.is_none() {
+        // Fallback do oráculo: botão Continue após o usuário.
         if let Some(button) =
-            first_present(page, &selectors::SIGN_IN_BUTTONS, options.detect_timeout).await
+            first_present(page, &selectors::CONTINUE_BUTTONS, options.detect_timeout).await
         {
-            let _ = page.click_selector(&button).await;
+            log_info(&format!("Clicando em continuar: {button}"));
+            let _ = click_visible(page, &selectors::CONTINUE_BUTTONS).await;
+        }
+        password_selector = wait_for_any(
+            page,
+            &selectors::PASSWORD_INPUTS,
+            options.password_wait_timeout,
+        )
+        .await;
+    }
+    if let Some(password_selector) = password_selector {
+        log_info(&format!("Campo de senha detectado: {password_selector}"));
+        fill_input(page, &password_selector, password).await?;
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        if let Some(button) =
+            wait_for_any(page, &selectors::SIGN_IN_BUTTONS, Duration::from_secs(5)).await
+        {
+            log_info(&format!("Submetendo login pelo botão: {button}"));
+            let clicked = click_visible(page, &selectors::SIGN_IN_BUTTONS).await;
+            log_info(&format!("Botão visível clicado: {clicked:?}"));
         } else {
+            log_info("Submetendo login com Enter.");
             press_enter(page, &password_selector).await?;
+        }
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        log_info(&format!(
+            "URL após submit: {}",
+            page.url().await.unwrap_or_default()
+        ));
+        if let Ok(value) = page
+            .eval_raw("document.body ? document.body.innerText : ''")
+            .await
+        {
+            if let Some(text) = value.as_str() {
+                let collapsed: String = text.split_whitespace().collect::<Vec<_>>().join(" ");
+                let snippet: String = collapsed.chars().take(300).collect();
+                let sanitized = regex::Regex::new(r"[\w.+-]+@[\w.-]+")
+                    .map(|re| re.replace_all(&snippet, "[email]").to_string())
+                    .unwrap_or(snippet);
+                log_info(&format!("Texto da página pós-submit: {sanitized}"));
+            }
         }
     }
 
@@ -209,6 +301,7 @@ pub async fn run_login(
         .await
         .is_some()
     {
+        log_info("Campo de 2FA detectado.");
         return if options.interactive {
             Err(LoginError::InteractiveTwoFactorUnsupported)
         } else {
@@ -217,6 +310,26 @@ pub async fn run_login(
     }
 
     // 4. Validação dos cookies com retries.
+    if let Ok(state) = page.storage_state().await {
+        let count = state
+            .get("cookies")
+            .and_then(Value::as_array)
+            .map_or(0, Vec::len);
+        let names: Vec<&str> = state
+            .get("cookies")
+            .and_then(Value::as_array)
+            .map(|cookies| {
+                cookies
+                    .iter()
+                    .filter_map(|cookie| cookie.get("name").and_then(Value::as_str))
+                    .collect()
+            })
+            .unwrap_or_default();
+        log_info(&format!(
+            "Cookies presentes após submit: {count} ({})",
+            names.join(", ")
+        ));
+    }
     for attempt in 0..options.cookie_attempts.max(1) {
         if has_auth_cookies(page).await? {
             return Ok(LoginOutcome::Success);
@@ -226,7 +339,9 @@ pub async fn run_login(
         }
     }
 
-    if has_captcha_challenge(page, options.detect_timeout).await {
+    let captcha = has_captcha_challenge(page, options.detect_timeout).await;
+    log_info(&format!("Desafio anti-bot visível após login: {captcha}"));
+    if captcha {
         return Err(LoginError::CaptchaChallenge);
     }
     Err(LoginError::NoAuthCookies)
