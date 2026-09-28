@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  lint-and-test:
+    name: fmt + clippy + test
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain (stable com rustfmt/clippy)
+        run: rustup toolchain install stable --component rustfmt,clippy --profile minimal
+
+      - name: Cache de build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Formatação
+        run: cargo fmt --all --check
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Testes
+        run: cargo test --workspace
+
+      - name: Auditoria de dependências
+        run: |
+          cargo install cargo-audit --locked || true
+          cargo audit || true
+
+  docker:
+    name: build da imagem
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    needs: lint-and-test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build da imagem
+        run: docker build -t ali-coins-rust:ci .
+      - name: Smoke do healthcheck (dry-run precisa de credenciais fake)
+        run: |
+          docker run --rm \
+            -e ALI_USER=ci@example.com \
+            -e ALI_PASSWORD=ci \
+            -e ENCRYPT_LOCAL_SESSION=false \
+            ali-coins-rust:ci --dry-run --json | head -5
