@@ -17,3 +17,5 @@ path = "src/main.rs"
 ali-coins-core = { path = "../ali-coins-core" }
 ali-coins-browser = { path = "../ali-coins-browser" }
 ali-coins-flows = { path = "../ali-coins-flows" }
+clap = "4"
+dotenvy = "0.15"

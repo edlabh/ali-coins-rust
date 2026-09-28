@@ -28,7 +28,7 @@ Depende de: `docs/01-avaliacao.md`, `docs/02-arquitetura.md`, `docs/adr/` (ADR-0
 
 Escopo: `core::config`, `crypto`, `session`, `lock`, `logging`, `time`, `report`, `notify`, `exit`; subcomando `--dry-run` funcional; `export-session`/`import-session` completos.
 
-**Status: em andamento (2026-09-28).** Concluído: `crypto` v1/v2/v3 + `secure_fs`, com interop bidirecional Node↔Rust (22 testes verdes; `verify-rust-tokens.sh` OK). Pendentes: `config`/env, `session`, `lock`, `logging`/`exit`, `time`, `report`, `notify`/SSRF e `--dry-run`.
+**Status: em andamento (2026-09-28).** Concluído: `crypto` v1/v2/v3 + `secure_fs` (interop bidirecional) e `config`/env + subcomando `--dry-run [--json]` com paridade em 5 cenários (default, multi-conta, tunado, pausas inválidas, secret ausente). Pendentes: `session`, `lock`, `logging`/`exit`, `time`, `report`, `notify`/SSRF e `export-session`/`import-session`.
 
 **Entregáveis**
 - Parser de env com tabela declarativa + mensagens PT-BR; `credentials.env`/`accounts.json`; paths/hash por conta.

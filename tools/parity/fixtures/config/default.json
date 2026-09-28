@@ -1,0 +1,49 @@
+{
+  "dryRun": true,
+  "valid": true,
+  "user": "pa***@example.com",
+  "passwordConfigured": true,
+  "sessionSecretConfigured": true,
+  "sessionSecretOldConfigured": false,
+  "encryptLocalSession": false,
+  "allowMedia": false,
+  "headless": true,
+  "logLevel": "info",
+  "captchaCooldownHours": 12,
+  "noSandbox": false,
+  "navTimeout": 35000,
+  "taskMaxActions": 25,
+  "taskMaxAttempts": 4,
+  "taskRoundMaxAttempts": 3,
+  "taskMaxDurationMs": 180000,
+  "taskScrollMaxMs": 30000,
+  "taskPauseMinMs": 0,
+  "taskPauseMaxMs": 0,
+  "accountDelayMinMs": 0,
+  "accountDelayMaxMs": 0,
+  "startDelayMinMs": 0,
+  "startDelayMaxMs": 0,
+  "telegram": {
+    "enabled": false,
+    "botTokenConfigured": false,
+    "chatIdConfigured": false,
+    "silent": false,
+    "testSent": false
+  },
+  "heartbeat": {
+    "enabled": false,
+    "urlConfigured": false,
+    "timeoutMs": 5000
+  },
+  "webhook": {
+    "urlConfigured": false,
+    "allowPrivateWebhooks": false
+  },
+  "accounts": [
+    {
+      "index": 1,
+      "user": "pa***@example.com",
+      "passwordConfigured": true
+    }
+  ]
+}
