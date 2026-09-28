@@ -20,6 +20,13 @@ use std::io::IsTerminal as _;
 use std::process::ExitCode as StdExitCode;
 use std::time::Duration;
 
+/// Perfil de browser novo por execução (o oráculo usa contexto descartável).
+fn fresh_profile_dir() -> std::path::PathBuf {
+    let dir = std::env::temp_dir().join(format!("ali-coins-profile-{}", std::process::id()));
+    let _ = std::fs::create_dir_all(&dir);
+    dir
+}
+
 fn has_flag(args: &[String], name: &str) -> bool {
     args.iter().any(|arg| arg == name)
 }
@@ -122,7 +129,7 @@ pub fn run(args: &[String]) -> StdExitCode {
                 executable_path: std::env::var("ALI_COINS_CHROME")
                     .ok()
                     .map(std::path::PathBuf::from),
-                user_data_dir: None,
+                user_data_dir: Some(fresh_profile_dir()),
                 env: Vec::new(),
             };
             let browser = driver

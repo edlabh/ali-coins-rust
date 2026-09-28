@@ -327,6 +327,15 @@ pub async fn run_tasks(page: &dyn Page, options: &TasksOptions) -> Result<TasksR
         return Err(TasksError::DrawerMissing);
     }
     let initial = wait_for_tasks_with_reload(page, Duration::from_secs(15)).await;
+    for task in &initial {
+        ali_coins_core::logging::global().info(
+            &format!(
+                "Tarefa extraída: {:?} | botão: {:?} | rounds: {:?}",
+                task.title, task.button, task.rounds
+            ),
+            &[],
+        );
+    }
     if initial.is_empty() {
         let snippet = page
             .eval_raw(
@@ -378,7 +387,8 @@ pub async fn run_tasks(page: &dyn Page, options: &TasksOptions) -> Result<TasksR
                 !blocked.contains(&task.title)
                     && !crate::tasks::is_done(&task.button, task.rounds, None)
                     && (crate::tasks::is_claimable(&task.button)
-                        || crate::tasks::is_actionable(&task.button))
+                        || crate::tasks::is_actionable(&task.button)
+                        || task.button.trim().is_empty())
             })
             .collect();
         candidates.sort_by_key(|(_, task)| priority(&task.button));
@@ -405,6 +415,33 @@ pub async fn run_tasks(page: &dyn Page, options: &TasksOptions) -> Result<TasksR
             actions += 1;
             tokio::time::sleep(Duration::from_secs(2)).await;
             let _ = crate::navigation::close_modals(page).await;
+            continue;
+        }
+
+        // Card sem texto de botão: o alvo do clique é o próprio card/right.
+        if task.button.trim().is_empty() {
+            let script = format!(
+                "(() => {{ const items = Array.from(document.querySelectorAll('.e2e_normal_task')); \
+                 const el = items[{index}]; if (!el) return false; \
+                 const target = el.querySelector('.e2e_normal_task_right') || el; target.click(); return true; }})()"
+            );
+            let _ = page.eval_raw(&script).await;
+            actions += 1;
+            tokio::time::sleep(Duration::from_secs(2)).await;
+            let url = page.url().await.unwrap_or_default();
+            if url.contains("coin-index") {
+                let _ = crate::navigation::close_modals(page).await;
+            } else {
+                // Permanência com scroll na página da tarefa (navegação real).
+                let wait = options.scroll_wait.max(Duration::from_secs(8));
+                let deadline = std::time::Instant::now() + wait;
+                while std::time::Instant::now() < deadline {
+                    let _ = page.scroll_by(0, 1200).await;
+                    tokio::time::sleep(Duration::from_secs(2)).await;
+                }
+                let _ = goto_with_retry(page, DESKTOP_COIN_URL).await;
+                let _ = open_drawer(page, Duration::from_secs(10)).await;
+            }
             continue;
         }
 
