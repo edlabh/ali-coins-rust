@@ -185,7 +185,12 @@ pub fn run(args: &[String]) -> StdExitCode {
                     &[],
                 );
             }
-            Ok(ExitCode::Success.as_i32())
+            if run.results.is_empty() {
+                logging::global().warn("Nenhuma tarefa encontrada no painel (sem ação).", &[]);
+                Ok(ExitCode::NoAction.as_i32())
+            } else {
+                Ok(ExitCode::Success.as_i32())
+            }
         })
         .map_or_else(
             |error: String| {
