@@ -6,6 +6,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod cdp;
 pub mod driver;
 pub mod launch;
 pub mod mock;

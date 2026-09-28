@@ -4,6 +4,7 @@
 //! `MockDriver` (testes) ficam atrás da mesma interface, permitindo portar a
 //! suíte de testes sem Chromium e trocar a implementação sem tocar em regras.
 
+use super::launch::DeviceProfile;
 use async_trait::async_trait;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
@@ -107,6 +108,13 @@ pub trait Page: Send + Sync {
     async fn content(&self) -> Result<String, BrowserError>;
     /// Avalia script devolvendo JSON cru (use [`eval_as`] para tipar).
     async fn eval_raw(&self, script: &str) -> Result<Value, BrowserError>;
+    /// Aplica emulação mobile (device metrics/touch/UA/locale).
+    async fn set_device_profile(&self, profile: &DeviceProfile) -> Result<(), BrowserError> {
+        let _ = profile;
+        Err(BrowserError::Unsupported(
+            "set_device_profile não suportado nesta implementação".to_string(),
+        ))
+    }
     /// Aguarda um seletor ficar visível.
     async fn wait_for_selector(
         &self,

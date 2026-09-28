@@ -234,6 +234,14 @@ impl Page for MockPage {
         Ok(())
     }
 
+    async fn set_device_profile(
+        &self,
+        _profile: &super::launch::DeviceProfile,
+    ) -> Result<(), BrowserError> {
+        self.ensure_open()?;
+        Ok(())
+    }
+
     async fn screenshot(&self) -> Result<Vec<u8>, BrowserError> {
         self.ensure_open()?;
         self.record(MockAction::Screenshot);
