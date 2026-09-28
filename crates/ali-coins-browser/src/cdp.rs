@@ -29,6 +29,16 @@ Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
 window.chrome = window.chrome || { runtime: {} };
 ";
 
+/// Divide um argumento no formato do oráculo (`--chave` ou `--chave=valor`)
+/// na chave e no valor esperados pelo chromiumoxide (que adiciona `--`).
+fn parse_chromium_arg(argument: &str) -> (&str, Option<&str>) {
+    let trimmed = argument.strip_prefix("--").unwrap_or(argument);
+    match trimmed.split_once('=') {
+        Some((key, value)) => (key, Some(value)),
+        None => (trimmed, None),
+    }
+}
+
 /// Driver de produção.
 #[derive(Debug, Clone, Default)]
 pub struct CdpDriver;
@@ -52,7 +62,19 @@ impl CdpDriver {
             builder.with_head()
         };
         if !options.args.is_empty() {
-            builder = builder.args(options.args.iter().cloned());
+            // O chromiumoxide prefixa `--` a cada argumento: enviamos a chave
+            // (e o valor) sem os hífens para não gerar `----flag`, que o Chrome
+            // ignora silenciosamente (ex.: `--no-sandbox` virava `----no-sandbox`).
+            let mut flags: Vec<&str> = Vec::new();
+            let mut pairs: Vec<(&str, &str)> = Vec::new();
+            for arg in &options.args {
+                let (key, value) = parse_chromium_arg(arg);
+                match value {
+                    Some(value) => pairs.push((key, value)),
+                    None => flags.push(key),
+                }
+            }
+            builder = builder.args(flags).args(pairs);
         }
         if !options.env.is_empty() {
             builder = builder.envs(options.env.iter().cloned());
@@ -347,4 +369,35 @@ pub async fn eval_typed<T: DeserializeOwned>(
 ) -> Result<T, BrowserError> {
     let value = page.eval_raw(script).await?;
     serde_json::from_value(value).map_err(|err| BrowserError::Evaluate(err.to_string()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_chromium_arg;
+
+    #[test]
+    fn parse_flag_sem_valor() {
+        assert_eq!(parse_chromium_arg("--no-sandbox"), ("no-sandbox", None));
+        assert_eq!(parse_chromium_arg("no-zygote"), ("no-zygote", None));
+    }
+
+    #[test]
+    fn parse_chave_valor() {
+        assert_eq!(
+            parse_chromium_arg("--disable-dev-shm-usage"),
+            ("disable-dev-shm-usage", None)
+        );
+        assert_eq!(
+            parse_chromium_arg("--disable-features=Translate,AcceptCHFrame"),
+            ("disable-features", Some("Translate,AcceptCHFrame"))
+        );
+    }
+
+    #[test]
+    fn parse_valor_com_hifens() {
+        assert_eq!(
+            parse_chromium_arg("--js-flags=--max-old-space-size=128"),
+            ("js-flags", Some("--max-old-space-size=128"))
+        );
+    }
 }
