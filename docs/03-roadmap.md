@@ -48,7 +48,7 @@ Escopo: `core::config`, `crypto`, `session`, `lock`, `logging`, `time`, `report`
 
 ## Fase 2 — Camada de browser (1,5–2 semanas)
 
-**Status: em andamento (2026-09-28).** Concluído: políticas de launch (args, cascata de 4 perfis, low-memory, sandbox condicional, `/dev/shm`, sanitização de env/proxy) e perfil Pixel 7 validado contra o Playwright. Pendentes: trait `BrowserDriver`, `MockDriver` e `CdpDriver` (chromiumoxide) com emulação/rede/diagnósticos.
+**Status: em andamento (2026-09-28).** Concluído: políticas de launch (args, cascata, low-memory, sandbox, `/dev/shm`, sanitização de env/proxy), perfil Pixel 7 validado e fronteira `BrowserDriver`/`Browser`/`Page` + `MockDriver` com páginas roteirizadas. Pendente: `CdpDriver` (chromiumoxide) com emulação/rede/diagnósticos.
 
 Escopo: `browser::cdp` (launch/cascata de args, sanitização de env, low-memory, emulação Pixel 7, init scripts, bloqueio de recursos, contextos/páginas/popups, storageState, cookies) + `diagnostics` (screenshot/trace; vídeo opcional) + `MockDriver`.
 
