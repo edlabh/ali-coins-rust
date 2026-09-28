@@ -1,0 +1,321 @@
+{
+  "generator": "tools/parity/node/gen_report.mjs",
+  "isStreakBreak": [
+    {
+      "current": 1,
+      "previous": 10,
+      "already": false,
+      "result": true
+    },
+    {
+      "current": 7,
+      "previous": 212,
+      "already": false,
+      "result": false
+    },
+    {
+      "current": 1,
+      "previous": 10,
+      "already": true,
+      "result": false
+    },
+    {
+      "current": 1,
+      "previous": 1,
+      "already": false,
+      "result": false
+    },
+    {
+      "current": null,
+      "previous": 10,
+      "already": false,
+      "result": false
+    },
+    {
+      "current": 2,
+      "previous": 10,
+      "already": false,
+      "result": false
+    },
+    {
+      "current": 10,
+      "previous": 10,
+      "already": false,
+      "result": false
+    }
+  ],
+  "resolveStreakDays": [
+    {
+      "params": {
+        "detectedStreak": 5,
+        "previousStreakDays": 5,
+        "justCollected": true
+      },
+      "streakDays": 6,
+      "baseStreak": 5
+    },
+    {
+      "params": {
+        "detectedStreak": 5,
+        "previousStreakDays": 5,
+        "alreadyCollected": true
+      },
+      "streakDays": 5,
+      "baseStreak": 5
+    },
+    {
+      "params": {
+        "detectedStreak": null,
+        "previousStreakDays": 5,
+        "justCollected": true
+      },
+      "streakDays": 6,
+      "baseStreak": 5
+    },
+    {
+      "params": {
+        "detectedStreak": 7,
+        "previousStreakDays": 212,
+        "justCollected": true
+      },
+      "streakDays": 213,
+      "baseStreak": 212
+    },
+    {
+      "params": {
+        "detectedStreak": 7,
+        "previousStreakDays": 212,
+        "alreadyCollected": true
+      },
+      "streakDays": 212,
+      "baseStreak": 212
+    },
+    {
+      "params": {
+        "detectedStreak": 1,
+        "previousStreakDays": 50,
+        "statementStreak": 50
+      },
+      "streakDays": 50,
+      "baseStreak": 50
+    },
+    {
+      "params": {
+        "detectedStreak": 60,
+        "previousStreakDays": 50
+      },
+      "streakDays": 60,
+      "baseStreak": 50
+    },
+    {
+      "params": {
+        "detectedStreak": "N/D",
+        "previousStreakDays": 50
+      },
+      "streakDays": 50,
+      "baseStreak": 50
+    },
+    {
+      "params": {
+        "detectedStreak": 3,
+        "justCollected": true
+      },
+      "streakDays": 3,
+      "baseStreak": null
+    },
+    {
+      "params": {
+        "detectedStreak": "7 dias",
+        "previousStreakDays": 7,
+        "confirmedByLedger": true
+      },
+      "streakDays": 8,
+      "baseStreak": 7
+    }
+  ],
+  "computeCheckinCoinsGained": [
+    {
+      "checkin": null,
+      "result": 0
+    },
+    {
+      "checkin": {
+        "alreadyCollected": true,
+        "coinsGainedToday": "40"
+      },
+      "result": 0
+    },
+    {
+      "checkin": {
+        "alreadyCollected": true,
+        "coinsGainedToday": "25",
+        "checkinCoinsFromLedger": true
+      },
+      "result": 25
+    },
+    {
+      "checkin": {
+        "alreadyCollected": false,
+        "coinsGainedToday": "0"
+      },
+      "result": 0
+    },
+    {
+      "checkin": {
+        "alreadyCollected": false,
+        "coinsGainedToday": "20"
+      },
+      "result": 20
+    },
+    {
+      "checkin": {
+        "alreadyCollected": false,
+        "coinsGainedToday": "N/D",
+        "streakDays": 4
+      },
+      "result": 25
+    },
+    {
+      "checkin": {
+        "alreadyCollected": false,
+        "coinsGainedToday": "",
+        "streakDays": "N/D"
+      },
+      "result": 0
+    },
+    {
+      "checkin": {
+        "alreadyCollected": false
+      },
+      "result": 0
+    },
+    {
+      "checkin": {
+        "alreadyCollected": true,
+        "checkinCoinsFromLedger": true,
+        "coinsGainedToday": ""
+      },
+      "result": 0
+    }
+  ],
+  "computeTasksCoinsGained": [
+    {
+      "tasks": null,
+      "checkin": null,
+      "result": 0
+    },
+    {
+      "tasks": {
+        "coinsGained": 30
+      },
+      "checkin": null,
+      "result": 30
+    },
+    {
+      "tasks": {
+        "coinsGained": 30,
+        "coinsFromLedger": true
+      },
+      "checkin": {
+        "alreadyCollected": true,
+        "coinsGainedToday": "20"
+      },
+      "result": 30
+    },
+    {
+      "tasks": {
+        "coinsGained": 30,
+        "initialBalance": 100
+      },
+      "checkin": {
+        "alreadyCollected": false,
+        "coinsGainedToday": "20",
+        "totalBalance": "120"
+      },
+      "result": 10
+    },
+    {
+      "tasks": {
+        "coinsGained": 30,
+        "initialBalance": 120
+      },
+      "checkin": {
+        "alreadyCollected": false,
+        "coinsGainedToday": "20",
+        "totalBalance": "120"
+      },
+      "result": 30
+    },
+    {
+      "tasks": {
+        "coinsGained": 10,
+        "initialBalance": 100
+      },
+      "checkin": {
+        "alreadyCollected": false,
+        "coinsGainedToday": "20",
+        "totalBalance": "120",
+        "balanceBeforeCheckin": true
+      },
+      "result": 0
+    },
+    {
+      "tasks": {
+        "coinsGained": "30"
+      },
+      "checkin": null,
+      "result": 0
+    },
+    {
+      "tasks": {
+        "coinsGained": 5,
+        "initialBalance": "0"
+      },
+      "checkin": {
+        "alreadyCollected": false,
+        "coinsGainedToday": "20",
+        "totalBalance": "20"
+      },
+      "result": 0
+    }
+  ],
+  "computeFinalBalance": [
+    {
+      "checkin": null,
+      "tasks": null,
+      "result": "N/D"
+    },
+    {
+      "checkin": {
+        "totalBalance": "99"
+      },
+      "tasks": null,
+      "result": "99 moedas"
+    },
+    {
+      "checkin": {
+        "totalBalance": "N/D"
+      },
+      "tasks": {
+        "finalCoins": "150"
+      },
+      "result": "150"
+    },
+    {
+      "checkin": {
+        "totalBalance": "99"
+      },
+      "tasks": {
+        "finalCoins": "N/D"
+      },
+      "result": "99 moedas"
+    },
+    {
+      "checkin": null,
+      "tasks": {
+        "finalCoins": "0"
+      },
+      "result": "0"
+    }
+  ]
+}
