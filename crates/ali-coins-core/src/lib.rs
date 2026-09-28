@@ -13,6 +13,8 @@ pub mod lock;
 pub mod logging;
 pub mod secure_fs;
 pub mod session;
+pub mod time;
+pub mod url_guard;
 
 /// Versão do crate, herdada do workspace.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

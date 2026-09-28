@@ -13,6 +13,7 @@ workspace = true
 aes-gcm = "0.10"
 base64 = "0.22"
 chrono = { version = "0.4", features = ["clock"] }
+chrono-tz = "0.10"
 rand = "0.9"
 regex = "1"
 scrypt = "0.11"
