@@ -4,6 +4,7 @@
 //! moedas⇄dias do ciclo oficial, detecção de prompt de login e extração do
 //! extrato de hoje (bônus de check-in vs. missões).
 
+use chrono::Datelike as _;
 use regex::Regex;
 use std::sync::OnceLock;
 
@@ -134,17 +135,144 @@ pub fn extract_today_ledger(today_section: &str) -> LedgerExtract {
     }
 }
 
-fn compiled(pattern: &'static str) -> &'static Regex {
-    static CACHE: OnceLock<
-        std::sync::Mutex<std::collections::HashMap<&'static str, &'static Regex>>,
-    > = OnceLock::new();
+/// Extrai a sequência de check-ins consecutivos do histórico do extrato desktop.
+///
+/// `today_la` é a data de "hoje" no fuso `America/Los_Angeles` (injetável para testes);
+/// o registro mais recente precisa ser de hoje ou ontem, senão `None`.
+#[must_use]
+pub fn get_streak_from_desktop_history(
+    desktop_text: &str,
+    today_la: chrono::NaiveDate,
+) -> Option<i64> {
+    if desktop_text.is_empty() {
+        return None;
+    }
+    let block_regex = compiled(r"([0-9]{1,2})/([0-9]{1,2})/([0-9]{4})\s*PT");
+    let label_regex = compiled(&format!(r"(?i){CHECKIN_LABEL_PATTERN}\s*\n\s*\+([0-9]+)"));
+
+    let mut blocks: Vec<(i64, i64, i64, usize)> = Vec::new();
+    for captures in block_regex.captures_iter(desktop_text) {
+        let Some(full) = captures.get(0) else {
+            continue;
+        };
+        let day = captures
+            .get(1)
+            .and_then(|value| value.as_str().parse().ok());
+        let month = captures
+            .get(2)
+            .and_then(|value| value.as_str().parse().ok());
+        let year = captures
+            .get(3)
+            .and_then(|value| value.as_str().parse().ok());
+        if let (Some(day), Some(month), Some(year)) = (day, month, year) {
+            blocks.push((day, month, year, full.end()));
+        }
+    }
+    if blocks.is_empty() {
+        return None;
+    }
+
+    let mut raw_matches: Vec<(i64, i64, i64, i64)> = Vec::new();
+    for (index, (day, month, year, start)) in blocks.iter().enumerate() {
+        let end = blocks
+            .get(index + 1)
+            .map_or(desktop_text.len(), |next| next.3);
+        let section = &desktop_text[*start..end];
+        if let Some(captures) = label_regex.captures(section) {
+            if let Some(coins) = captures
+                .get(1)
+                .and_then(|value| value.as_str().parse().ok())
+            {
+                raw_matches.push((*day, *month, *year, coins));
+            }
+        }
+    }
+    if raw_matches.is_empty() {
+        return None;
+    }
+
+    let has_p1_gt12 = raw_matches.iter().any(|(day, ..)| *day > 12);
+    let has_p2_gt12 = raw_matches.iter().any(|(_, month, ..)| *month > 12);
+
+    let is_us_format = if has_p2_gt12 {
+        true
+    } else if has_p1_gt12 {
+        false
+    } else {
+        let has_pt_header = compiled(r"(?i)Minhas moedas|B[ôo]nus di[áa]rio|Miss[õo]es de moedas")
+            .is_match(desktop_text);
+        let has_en_header = compiled(r"(?i)My coins").is_match(desktop_text);
+        if has_pt_header && !has_en_header {
+            false
+        } else if has_en_header && !has_pt_header {
+            true
+        } else {
+            let today_us = format!(
+                "{:02}/{:02}/{} PT",
+                today_la.month(),
+                today_la.day(),
+                today_la.year()
+            );
+            desktop_text.contains(&today_us)
+        }
+    };
+
+    let mut entries: Vec<(chrono::NaiveDate, i64)> = Vec::new();
+    for (p1, p2, year, coins) in raw_matches {
+        let (day, month) = if is_us_format { (p2, p1) } else { (p1, p2) };
+        let parsed = (
+            i32::try_from(year).ok(),
+            u32::try_from(month).ok(),
+            u32::try_from(day).ok(),
+        );
+        let (Some(year), Some(month), Some(day)) = parsed else {
+            continue;
+        };
+        let Some(date) = chrono::NaiveDate::from_ymd_opt(year, month, day) else {
+            continue;
+        };
+        entries.push((date, coins));
+    }
+
+    let mut seen = std::collections::HashSet::new();
+    let mut unique_days: Vec<i64> = Vec::new();
+    for (date, _coins) in entries {
+        let day_key = date.and_hms_opt(0, 0, 0)?.and_utc().timestamp() / 86_400;
+        if seen.insert(day_key) {
+            unique_days.push(day_key);
+        }
+    }
+    if unique_days.is_empty() {
+        return None;
+    }
+    unique_days.sort_unstable_by(|a, b| b.cmp(a));
+
+    let today_key = today_la.and_hms_opt(0, 0, 0)?.and_utc().timestamp() / 86_400;
+    if unique_days[0] < today_key - 1 {
+        return None;
+    }
+
+    let mut streak = 1_i64;
+    for window in unique_days.windows(2) {
+        if window[1] == window[0] - 1 {
+            streak += 1;
+        } else {
+            break;
+        }
+    }
+    Some(streak)
+}
+
+fn compiled(pattern: &str) -> &'static Regex {
+    static CACHE: OnceLock<std::sync::Mutex<std::collections::HashMap<String, &'static Regex>>> =
+        OnceLock::new();
     let cache = CACHE.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()));
     let mut cache = cache.lock().expect("cache de regex");
     if let Some(found) = cache.get(pattern) {
         return found;
     }
     let regex: &'static Regex = Box::leak(Box::new(Regex::new(pattern).expect("regex válida")));
-    cache.insert(pattern, regex);
+    cache.insert(pattern.to_string(), regex);
     regex
 }
 
@@ -195,5 +323,63 @@ mod tests {
         let extract = extract_today_ledger(today);
         assert_eq!(extract.bonus_coins, Some(20));
         assert_eq!(extract.missions_coins, 0);
+    }
+
+    fn date(year: i32, month: u32, day: u32) -> chrono::NaiveDate {
+        chrono::NaiveDate::from_ymd_opt(year, month, day).expect("data válida")
+    }
+
+    #[test]
+    fn historico_consecutivo_formato_br() {
+        let text = "Minhas moedas\n25/09/2026 PT App daily check-in\n+40\n24/09/2026 PT App daily check-in\n+35\n23/09/2026 PT App daily check-in\n+30";
+        assert_eq!(
+            get_streak_from_desktop_history(text, date(2026, 9, 25)),
+            Some(3)
+        );
+    }
+
+    #[test]
+    fn historico_quebra_quando_dia_falta() {
+        let text = "Minhas moedas\n25/09/2026 PT App daily check-in\n+40\n24/09/2026 PT App daily check-in\n+35\n22/09/2026 PT App daily check-in\n+25";
+        assert_eq!(
+            get_streak_from_desktop_history(text, date(2026, 9, 25)),
+            Some(2)
+        );
+    }
+
+    #[test]
+    fn historico_antigo_retorna_none() {
+        let text = "Minhas moedas\n15/09/2026 PT App daily check-in\n+40\n14/09/2026 PT App daily check-in\n+35";
+        assert_eq!(
+            get_streak_from_desktop_history(text, date(2026, 9, 25)),
+            None
+        );
+    }
+
+    #[test]
+    fn historico_formato_us() {
+        let text = "My coins\n09/25/2026 PT App daily check-in\n+40\n09/24/2026 PT App daily check-in\n+35";
+        assert_eq!(
+            get_streak_from_desktop_history(text, date(2026, 9, 25)),
+            Some(2)
+        );
+    }
+
+    #[test]
+    fn historico_ontem_ainda_vale() {
+        let text = "Minhas moedas\n24/09/2026 PT App daily check-in\n+35";
+        assert_eq!(
+            get_streak_from_desktop_history(text, date(2026, 9, 25)),
+            Some(1)
+        );
+    }
+
+    #[test]
+    fn historico_nao_cruza_datas() {
+        let text = "Minhas moedas\n25/09/2026 PT\n24/09/2026 PT App daily check-in\n+35";
+        assert_eq!(
+            get_streak_from_desktop_history(text, date(2026, 9, 25)),
+            Some(1)
+        );
     }
 }
