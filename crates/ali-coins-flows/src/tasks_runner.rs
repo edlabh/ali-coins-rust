@@ -266,12 +266,27 @@ fn click_task_button(index: usize) -> String {
     )
 }
 
-/// Aguarda os itens da gaveta renderizarem (skeleton do verifier).
+/// O loader (`common-loading-icon`) está visível na gaveta?
+pub async fn loading_skeleton_visible(page: &dyn Page) -> bool {
+    let script = r"(() => {
+  const node = document.querySelector('.common-loading-icon');
+  if (!node) return false;
+  const rect = node.getBoundingClientRect();
+  return rect.width > 0 && rect.height > 0 && node.offsetParent !== null;
+})()";
+    page.eval_raw(script)
+        .await
+        .ok()
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false)
+}
+
+/// Aguarda os itens da gaveta renderizarem (loader precisa sumir, como no verifier).
 pub async fn wait_for_tasks(page: &dyn Page, timeout: Duration) -> Vec<TaskItem> {
     let deadline = std::time::Instant::now() + timeout;
     loop {
         if let Ok(tasks) = extract_tasks(page).await {
-            if !tasks.is_empty() {
+            if !tasks.is_empty() && !loading_skeleton_visible(page).await {
                 return tasks;
             }
         }
