@@ -27,7 +27,13 @@ cargo build --release -p ali-coins-cli
 # binário: target/release/ali-coins
 ```
 
-> Recomendado em hosts com pouca RAM: `CARGO_BUILD_JOBS=1 CARGO_PROFILE_RELEASE_LTO=false CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16 cargo build --release -p ali-coins-cli`
+> ⚠️ Em hosts com poucos recursos (1 vCPU / ~1 GB de RAM) a compilação completa pode
+> levar **horas** e ser interrompida por falta de memória. Nesses casos, prefira
+> **compilar em uma máquina de desenvolvimento** e copiar o binário pronto para o
+> servidor — o uso direto do binário deve ser priorizado, pelo menos no início.
+>
+> Se for compilar no próprio host: `CARGO_BUILD_JOBS=1 CARGO_PROFILE_RELEASE_LTO=false CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16 cargo build --release -p ali-coins-cli`,
+> com swap extra (2–4 GB).
 
 ## 3. Credenciais
 
@@ -72,7 +78,14 @@ No primeiro login o app pode pedir 2FA; em ambiente interativo o fluxo orienta, 
 `0` sucesso · `1` falha · `2` sem ação/já coletado · `3` lock ativo ·
 `4` streak quebrado · `5` 2FA não-interativo · `6` crash
 
-## 7. Docker (alternativa)
+## 7. Docker (experimental)
+
+> ⚠️ **Experimental — prefira o binário direto.**
+> O uso da imagem Docker ainda é experimental. Compilar dentro de um container
+> (ex.: imagem compatível `rust:bookworm`) pode levar **horas** em hosts com poucos
+> recursos (1 vCPU / ~1 GB de RAM) e o build pode ser morto por falta de memória.
+> No dia a dia, rode o binário nativo (`target/release/ali-coins` ou o `ali-coins`
+> instalado); use Docker somente se o ambiente exigir isolamento e valide antes.
 
 ```bash
 docker build -t ali-coins-rust .

@@ -37,7 +37,14 @@ CRON_TZ=America/Sao_Paulo
 - Para evitar sobreposição com outro bot, deixe uma janela (ex.: Node às 06:30 BRT, Rust às 08:30 BRT).
 - Rotação de `cron.log` é feita pelo `run_all.sh` (5 MB → `cron.log.1`).
 
-## 3. Modo Docker (espelhando o projeto Node)
+## 3. Modo Docker (experimental)
+
+> ⚠️ **Experimental — prefira o binário direto.**
+> O modo Docker ainda é experimental. Em VPS pequenas (1 vCPU / ~1 GB), compilar a
+> imagem compatível pode levar **horas** e esgotar RAM/swap; o caminho recomendado é
+> **compilar no seu computador e instalar o binário** no servidor (seções 1–2), usando
+> o Docker apenas se precisar de isolamento. Valide o modo Docker antes de confiar o
+> cron a ele (o marcador `.docker-ready` existe justamente para essa troca consciente).
 
 `tools/deploy/docker-run-vps.sh` roda o binário numa imagem com Chromium e limites de recursos:
 
@@ -55,7 +62,9 @@ CRON_TZ=America/Sao_Paulo
 - Adicione swap (2–4 GB): `sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile`.
 - Mantenha o Chromium em modo low-memory (padrão) e o container limitado a 768 MB.
 - Páginas pesadas podem levar ~35 s para o `domcontentloaded`; ajuste `NAV_TIMEOUT=90000` se necessário.
-- Evite compilar no servidor sem limite de jobs: `CARGO_BUILD_JOBS=1` e swap extra.
+- Evite compilar no servidor sem limite de jobs: prefira compilar em outra máquina e
+  copiar o binário; se compilar localmente, use `CARGO_BUILD_JOBS=1` e swap extra (o
+  build completo pode levar horas e ser morto por OOM em hosts de 1 GB).
 
 ## 5. Heartbeat (dead man's switch)
 

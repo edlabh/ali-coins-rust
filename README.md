@@ -53,7 +53,12 @@ ali-coins tasks              # painel "Ganhe mais moedas"
 `0` sucesso · `1` falha · `2` sem ação/já coletado · `3` lock ativo ·
 `4` streak quebrado · `5` 2FA não-interativo · `6` crash
 
-## Docker
+## Docker (experimental)
+
+> ⚠️ **Experimental.** Compilar dentro de um container pode levar **horas** em hosts com
+> poucos recursos (1 vCPU / ~1 GB de RAM) e ser morto por falta de memória. **Prefira o
+> binário direto** (`cargo build --release -p ali-coins-cli`), pelo menos no início; veja
+> `docs/manual/INSTALL_LINUX.md` e `docs/manual/CLOUD_SESSIONS.md`.
 
 ```bash
 docker build -t ali-coins-rust .
