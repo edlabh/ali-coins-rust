@@ -6,6 +6,7 @@
 #![forbid(unsafe_code)]
 
 pub mod balance;
+pub mod login;
 pub mod navigation;
 
 /// Versão do crate, herdada do workspace.

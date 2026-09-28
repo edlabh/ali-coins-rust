@@ -21,6 +21,7 @@ Contratos classificados como **rígidos** (devem ser idênticos) ou **flexíveis
 | D-03 | Diagnósticos em Rust implementam screenshot e DOM hash/dump, mas o **trace CDP** (zip do Playwright) ainda não foi portado. | `libs/ui/diagnostics.js:92-160` | Portar `Tracing.start/stop` com fixture de validação no incremento de diagnósticos avançados. |
 | D-05 | `storage_state` cobre **todos os cookies**, mas o localStorage apenas do **origin atual** (o Playwright enumera todos os origins visitados). | `browser.js` (`storageState`) | Migrar para o domínio `DOMStorage` quando os fluxos multi-origin entrarem na fase 3. |
 | D-06 | `close_modals` usa heurística de rótulos/classes; o oráculo tem lista exata de seletores com `:has-text`. | `libs/ui/navigation.js:59-164` | Alinhar seletores no incremento de paridade com o site real (check-in). |
+| D-07 | `login` cobre preenchimento/submissão/2FA fail-fast/validação de cookies, mas o **slider humanizado** (`trySolveSlider`) e os seletores `:has-text` completos ainda não foram portados. | `libs/ui/login.js`, `libs/selectors.js:8-29` | Portar slider (easing/jitter/frames) na paridade com o site real. |
 
 ## Rígidos (cobertos por teste de paridade)
 
