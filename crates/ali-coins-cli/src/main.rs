@@ -8,6 +8,7 @@
 use ali_coins_core::config::{
     Config, DryRunSummary, EnvSource, load_accounts, mask_chat_id, mask_user,
 };
+use ali_coins_core::{exit, logging};
 use clap::{Arg, ArgAction, Command};
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -61,6 +62,10 @@ fn last_boolean_flag(args: &[String], positive: &str, negative: &str) -> Option<
 fn main() -> ExitCode {
     let raw: Vec<String> = std::env::args().collect();
     let matches = command().get_matches_from(&raw);
+    let json_mode = matches.get_flag("json");
+
+    // Crash handler global: exit code 6 com cleanup best-effort.
+    exit::install_panic_handler(|| {});
 
     if !matches.get_flag("dry-run") {
         eprintln!(
@@ -84,13 +89,20 @@ fn main() -> ExitCode {
     let config = match Config::load(&env, &base_dir, true, notify, heartbeat) {
         Ok(config) => config,
         Err(error) => {
-            eprintln!("Falha na validação do arquivo credentials.env:");
-            for issue in error.issues() {
-                eprintln!(" • {}: {}", issue.path, issue.message);
-            }
+            let details = error
+                .issues()
+                .iter()
+                .map(|issue| format!(" • {}: {}", issue.path, issue.message))
+                .collect::<Vec<_>>()
+                .join("\n");
+            logging::global().error(
+                &format!("Falha na validação do arquivo credentials.env:\n{details}"),
+                &[],
+            );
             return ExitCode::from(1);
         }
     };
+    let _ = logging::init(config.log_level, json_mode);
 
     let accounts = load_accounts(&env, &base_dir);
 
