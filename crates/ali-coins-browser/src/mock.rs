@@ -28,6 +28,8 @@ pub struct MockPageSpec {
     pub visible_selectors: Vec<String>,
     /// Storage state devolvido por `storage_state`.
     pub storage_state: Option<Value>,
+    /// Quantas navegações falham antes de suceder (testes de retry).
+    pub fail_gotos: u32,
     /// Avaliações por substring do script (fallback do map exato).
     pub eval_contains: Vec<(String, Value)>,
 }
@@ -52,6 +54,7 @@ pub enum MockAction {
 #[derive(Default)]
 struct MockState {
     url: String,
+    goto_failures: u32,
 }
 
 /// Driver em memória.
@@ -120,6 +123,7 @@ impl Browser for MockBrowser {
         Ok(Box::new(MockPage {
             state: Arc::new(Mutex::new(MockState {
                 url: spec.url.clone(),
+                goto_failures: 0,
             })),
             spec,
             actions: Arc::clone(&self.actions),
@@ -158,7 +162,16 @@ impl MockPage {
 impl Page for MockPage {
     async fn goto(&self, url: &str, _options: &NavOptions) -> Result<(), BrowserError> {
         self.ensure_open()?;
-        self.state.lock().expect("estado").url = url.to_string();
+        {
+            let mut state = self.state.lock().expect("estado");
+            if state.goto_failures < self.spec.fail_gotos {
+                state.goto_failures += 1;
+                drop(state);
+                self.record(MockAction::Goto(url.to_string()));
+                return Err(BrowserError::Navigation(format!("falha simulada #{url}")));
+            }
+            state.url = url.to_string();
+        }
         self.record(MockAction::Goto(url.to_string()));
         Ok(())
     }

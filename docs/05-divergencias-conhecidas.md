@@ -20,6 +20,7 @@ Contratos classificados como **rígidos** (devem ser idênticos) ou **flexíveis
 | D-02 | Templates do Telegram cobrem os eventos e a mecânica (retry/truncamento/fallback), mas ainda **não têm paridade byte-a-byte** com os snapshots do oráculo. | `libs/notify.js:450-853` | Completar textos e adicionar fixture de snapshot (previsto no incremento de notificações/paridade). |
 | D-03 | Diagnósticos em Rust implementam screenshot e DOM hash/dump, mas o **trace CDP** (zip do Playwright) ainda não foi portado. | `libs/ui/diagnostics.js:92-160` | Portar `Tracing.start/stop` com fixture de validação no incremento de diagnósticos avançados. |
 | D-05 | `storage_state` cobre **todos os cookies**, mas o localStorage apenas do **origin atual** (o Playwright enumera todos os origins visitados). | `browser.js` (`storageState`) | Migrar para o domínio `DOMStorage` quando os fluxos multi-origin entrarem na fase 3. |
+| D-06 | `close_modals` usa heurística de rótulos/classes; o oráculo tem lista exata de seletores com `:has-text`. | `libs/ui/navigation.js:59-164` | Alinhar seletores no incremento de paridade com o site real (check-in). |
 
 ## Rígidos (cobertos por teste de paridade)
 

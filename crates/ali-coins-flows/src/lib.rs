@@ -6,6 +6,7 @@
 #![forbid(unsafe_code)]
 
 pub mod balance;
+pub mod navigation;
 
 /// Versão do crate, herdada do workspace.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
