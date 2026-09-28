@@ -191,7 +191,9 @@ impl Page for CdpPageHandle {
     ) -> Result<(), BrowserError> {
         let deadline = Instant::now() + timeout;
         loop {
-            if self.page.find_element(selector).await.is_ok() {
+            if self.page.find_element(selector).await.is_ok()
+                && selector_visible(&self.page, selector).await
+            {
                 return Ok(());
             }
             if Instant::now() >= deadline {
@@ -265,6 +267,22 @@ impl Page for CdpPageHandle {
             .map_err(|err| BrowserError::PageClosed(err.to_string()))?;
         Ok(())
     }
+}
+
+/// O elemento do seletor está visível? (semântica do Playwright `state: visible`).
+async fn selector_visible(page: &CdpPage, selector: &str) -> bool {
+    let script = format!(
+        "(() => {{ const el = document.querySelector({}); if (!el) return false; \
+         if (typeof el.checkVisibility === 'function') return el.checkVisibility({{ checkOpacity: true, checkVisibilityCSS: true }}); \
+         const rect = el.getBoundingClientRect(); \
+         return rect.width > 0 && rect.height > 0 && el.offsetParent !== null; }})()",
+        serde_json::to_string(selector).unwrap_or_default()
+    );
+    page.evaluate_expression(script)
+        .await
+        .ok()
+        .and_then(|result| result.into_value::<bool>().ok())
+        .unwrap_or(false)
 }
 
 /// Aplica o perfil mobile (device metrics + touch + UA/locale) numa página CDP.

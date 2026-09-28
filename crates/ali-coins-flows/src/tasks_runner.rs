@@ -38,6 +38,7 @@ pub mod selectors {
 pub const EXTRACT_SCRIPT: &str = r"(function () {
   const items = Array.from(document.querySelectorAll('.e2e_normal_task'));
   return items.map((el) => {
+    if (!(el.offsetWidth || el.offsetHeight || el.getClientRects().length)) return null;
     const text = (selector) => {
       const node = el.querySelector(selector);
       return node ? (node.textContent || '').trim() : '';
@@ -50,7 +51,7 @@ pub const EXTRACT_SCRIPT: &str = r"(function () {
       button,
       rounds: match ? { completed: Number(match[1]), total: Number(match[2]) } : null
     };
-  });
+  }).filter(Boolean);
 })()";
 
 /// Erros do runner.

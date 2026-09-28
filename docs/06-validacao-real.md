@@ -33,6 +33,29 @@ Run 1: `coinsGainedToday: "10"` (Dia 1 do ciclo, +10 moedas — consistente com 
 - **D-07**: slider anti-bot ainda não portado (não foi necessário nesta execução).
 - Sessão persistida cifrada (`session.json.enc`, `ENCRYPT_LOCAL_SESSION` com `SESSION_SECRET`).
 
+## Tasks — teste decisivo com o oráculo Node (2026-09-28)
+
+Para separar "estado da conta" de "diferença de DOM", o bot Node original
+(`do_tasks.js`) foi executado no mesmo host com a **mesma sessão exportada**:
+
+| Métrica | Oráculo Node | Port Rust |
+|---|---|---|
+| Gaveta abre | ✅ | ✅ (`.e2e_task`) |
+| Itens `.e2e_normal_task` | ✅ 15 ações | ❌ conteúdo preso no `common-loading-icon` |
+| Ganho do dia | +56 moedas (ledger), saldo 981 | 0 (exit 2 "sem ação") |
+
+**Conclusão**: as tarefas existem para a conta; a diferença é de fluxo/DOM. O
+oráculo executa 15 ações, incluindo "Coupons & shopping credits for you!",
+"Browse surprise items" (3 cards), "Items at $0.1" e navegação com scroll.
+
+Próximos passos para alinhar o runner Rust:
+1. Instrumentar a abertura da gaveta (dump do DOM **no momento em que o Node vê
+   as tarefas**) para comparar com `scratch/tasks-drawer.html`.
+2. Replicar a ordem exata do `verifier`/`dispatcher` (clicar o botão de tarefas
+   correto, aguardar a resposta da API antes do polling de itens).
+3. Revalidar preferencialmente em outro dia ou com tarefas pendentes, já que o
+   run do oráculo concluiu as tarefas do dia.
+
 ## Credenciais locais
 
 - `credentials.env` criado com **0600** e ignorado pelo git (contém `ALI_USER`, `ALI_PASSWORD` e `SESSION_SECRET` gerado).
