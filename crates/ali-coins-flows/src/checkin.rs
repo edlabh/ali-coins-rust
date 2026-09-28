@@ -14,6 +14,12 @@ use thiserror::Error;
 /// URL mobile do check-in de moedas.
 pub const MOBILE_COIN_URL: &str = "https://m.aliexpress.com/p/coin-index/index.html";
 
+/// URL efetiva do check-in (`ALI_COINS_COIN_URL` permite smoke offline).
+#[must_use]
+pub fn mobile_coin_url() -> String {
+    std::env::var("ALI_COINS_COIN_URL").unwrap_or_else(|_| MOBILE_COIN_URL.to_string())
+}
+
 /// Seletores de check-in do oráculo (subset sem `:has-text`, que exige JS).
 pub mod selectors {
     /// Botões/cartões de coleta (cascata).
@@ -124,7 +130,7 @@ pub async fn run_checkin(
     password: &str,
     options: &CheckinOptions,
 ) -> Result<CheckinResult, CheckinError> {
-    goto_with_retry(page, MOBILE_COIN_URL).await?;
+    goto_with_retry(page, &mobile_coin_url()).await?;
 
     // Login quando a página pedir credenciais.
     let needs_login = first_present(

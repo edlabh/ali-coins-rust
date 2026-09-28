@@ -20,7 +20,7 @@ fn flag_value<'a>(args: &'a [String], name: &str) -> Option<&'a str> {
         .map(String::as_str)
 }
 
-fn bootstrap() -> Option<(
+pub(crate) fn bootstrap() -> Option<(
     PathBuf,
     EnvSource,
     Config,

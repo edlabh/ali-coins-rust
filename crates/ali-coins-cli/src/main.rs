@@ -6,6 +6,7 @@
 #![forbid(unsafe_code)]
 
 mod export_import;
+mod run_checkin;
 
 use ali_coins_core::config::{
     Config, DryRunSummary, EnvSource, load_accounts, mask_chat_id, mask_user,
@@ -68,6 +69,7 @@ fn main() -> ExitCode {
     match raw.get(1).map(String::as_str) {
         Some("export-session") => return export_import::run_export(&raw[2..]),
         Some("import-session") => return export_import::run_import(&raw[2..]),
+        Some("checkin") => return run_checkin::run(&raw[2..]),
         _ => {}
     }
 
@@ -79,7 +81,7 @@ fn main() -> ExitCode {
 
     if !matches.get_flag("dry-run") {
         eprintln!(
-            "ali-coins-rust {} — Fase 1: use --dry-run, export-session ou import-session.",
+            "ali-coins-rust {} — use --dry-run, checkin, export-session ou import-session.",
             env!("CARGO_PKG_VERSION")
         );
         return ExitCode::from(1);
