@@ -116,6 +116,21 @@ pub trait Page: Send + Sync {
         ))
     }
 
+    /// Lê o storage state (cookies + localStorage) no formato do Playwright.
+    async fn storage_state(&self) -> Result<Value, BrowserError> {
+        Err(BrowserError::Unsupported(
+            "storage_state não suportado nesta implementação".to_string(),
+        ))
+    }
+
+    /// Aplica um storage state (cookies + localStorage do origin atual).
+    async fn seed_storage_state(&self, state: &Value) -> Result<(), BrowserError> {
+        let _ = state;
+        Err(BrowserError::Unsupported(
+            "seed_storage_state não suportado nesta implementação".to_string(),
+        ))
+    }
+
     /// Aplica emulação mobile (device metrics/touch/UA/locale).
     async fn set_device_profile(&self, profile: &DeviceProfile) -> Result<(), BrowserError> {
         let _ = profile;

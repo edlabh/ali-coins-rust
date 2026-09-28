@@ -26,6 +26,8 @@ pub struct MockPageSpec {
     pub selector_texts: HashMap<String, Vec<String>>,
     /// Seletores considerados visíveis.
     pub visible_selectors: Vec<String>,
+    /// Storage state devolvido por `storage_state`.
+    pub storage_state: Option<Value>,
     /// Avaliações por substring do script (fallback do map exato).
     pub eval_contains: Vec<(String, Value)>,
 }
@@ -231,6 +233,20 @@ impl Page for MockPage {
     async fn scroll_by(&self, x: i64, y: i64) -> Result<(), BrowserError> {
         self.ensure_open()?;
         self.record(MockAction::Scroll(x, y));
+        Ok(())
+    }
+
+    async fn storage_state(&self) -> Result<Value, BrowserError> {
+        self.ensure_open()?;
+        Ok(self
+            .spec
+            .storage_state
+            .clone()
+            .unwrap_or_else(|| serde_json::json!({ "cookies": [], "origins": [] })))
+    }
+
+    async fn seed_storage_state(&self, _state: &Value) -> Result<(), BrowserError> {
+        self.ensure_open()?;
         Ok(())
     }
 

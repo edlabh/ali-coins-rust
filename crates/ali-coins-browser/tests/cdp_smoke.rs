@@ -141,3 +141,77 @@ async fn bloqueia_recursos_e_gera_diagnosticos() {
         "imagem deveria ser bloqueada"
     );
 }
+
+#[tokio::test]
+#[ignore = "requer Chromium instalado (rode com --ignored)"]
+async fn storage_state_ida_e_volta() {
+    use std::io::{Read as _, Write as _};
+    use std::net::TcpListener;
+
+    // Servidor local com uma página simples.
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+    let port = listener.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else {
+                continue;
+            };
+            let mut buffer = [0_u8; 4096];
+            let _ = stream.read(&mut buffer);
+            let body = "<html><body>ok</body></html>";
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            );
+            let _ = stream.write_all(response.as_bytes());
+        }
+    });
+
+    let env = EnvSource::from_current_process();
+    let args = build_chromium_args(&ChromiumArgsInput {
+        env: &env,
+        is_root: false,
+        dev_shm_small: true,
+        force_no_sandbox: false,
+        low_memory: Some(true),
+    });
+    let profile_dir = tempfile::tempdir().expect("perfil");
+    let options = LaunchOptions {
+        headless: true,
+        args,
+        executable_path: std::env::var("ALI_COINS_CHROME")
+            .ok()
+            .map(std::path::PathBuf::from),
+        user_data_dir: Some(profile_dir.path().to_path_buf()),
+        ..LaunchOptions::default()
+    };
+    let driver = CdpDriver::new();
+    let browser = driver.launch(&options).await.expect("launch");
+    let page = browser.new_page().await.expect("page");
+
+    let base = format!("http://127.0.0.1:{port}");
+    page.goto(&format!("{base}/"), &NavOptions::default())
+        .await
+        .expect("goto");
+
+    let seed = serde_json::json!({
+        "cookies": [
+            { "name": "xman_us_t", "value": "auth-value", "domain": "127.0.0.1", "path": "/" }
+        ],
+        "origins": [
+            { "origin": base, "localStorage": [ { "name": "userInfo", "value": "1" } ] }
+        ]
+    });
+    page.seed_storage_state(&seed).await.expect("seed");
+
+    let state = page.storage_state().await.expect("state");
+    let cookies = state["cookies"].as_array().expect("cookies");
+    assert_eq!(cookies.len(), 1);
+    assert_eq!(cookies[0]["name"], "xman_us_t");
+    assert_eq!(cookies[0]["value"], "auth-value");
+    let origin = &state["origins"][0];
+    assert_eq!(origin["origin"], base);
+    let entries = origin["localStorage"].as_array().expect("localStorage");
+    assert_eq!(entries[0]["name"], "userInfo");
+    assert_eq!(entries[0]["value"], "1");
+}

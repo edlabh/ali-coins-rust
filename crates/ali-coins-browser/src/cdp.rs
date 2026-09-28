@@ -238,6 +238,14 @@ impl Page for CdpPageHandle {
         super::network::enable_resource_blocking(&self.page, allow_media).await
     }
 
+    async fn storage_state(&self) -> Result<Value, BrowserError> {
+        super::storage::read_storage_state(&self.page).await
+    }
+
+    async fn seed_storage_state(&self, state: &Value) -> Result<(), BrowserError> {
+        super::storage::seed_storage_state(&self.page, state).await
+    }
+
     async fn set_device_profile(&self, profile: &DeviceProfile) -> Result<(), BrowserError> {
         apply_device_profile(&self.page, profile).await
     }
