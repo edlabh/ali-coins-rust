@@ -7,6 +7,7 @@
 
 mod export_import;
 mod run_checkin;
+mod run_tasks;
 
 use ali_coins_core::config::{
     Config, DryRunSummary, EnvSource, load_accounts, mask_chat_id, mask_user,
@@ -70,6 +71,7 @@ fn main() -> ExitCode {
         Some("export-session") => return export_import::run_export(&raw[2..]),
         Some("import-session") => return export_import::run_import(&raw[2..]),
         Some("checkin") => return run_checkin::run(&raw[2..]),
+        Some("tasks") => return run_tasks::run(&raw[2..]),
         _ => {}
     }
 
