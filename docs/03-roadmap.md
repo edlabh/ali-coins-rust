@@ -67,6 +67,8 @@ Escopo: `browser::cdp` (launch/cascata de args, sanitização de env, low-memory
 
 ## Fase 3 — Check-in (1,5–2 semanas)
 
+**Status: em andamento (2026-09-28).** Concluído: parsers de saldo/streak/extrato (`flows::balance`) com paridade em fixtures do oráculo. Pendentes: histórico de streak no desktop, `login` (slider/2FA fail-fast), orquestração do `checkin` e smoke real.
+
 Escopo: `flows::login`, `balance`, `checkin` + `ui::navigation` (goto/retry/closeModals/slider).
 
 **Entregáveis**

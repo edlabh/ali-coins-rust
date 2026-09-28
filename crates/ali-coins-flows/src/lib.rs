@@ -1,9 +1,11 @@
 //! Fluxos do site (check-in, tarefas) do `ali-coins-rust`.
 //!
-//! Módulos previstos: `selectors`, `login`, `balance`, `checkin`, `tasks/*`,
-//! `ui/*`. Depende do browser apenas via traits (ADR-0001/0002).
+//! `balance` contém os parsers puros de saldo/streak/extrato; `checkin` e
+//! `tasks` entram nos próximos incrementos da fase 3.
 
 #![forbid(unsafe_code)]
+
+pub mod balance;
 
 /// Versão do crate, herdada do workspace.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

@@ -105,6 +105,13 @@ version = "0.1.0"
 dependencies = [
  "ali-coins-browser",
  "ali-coins-core",
+ "async-trait",
+ "regex",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tokio",
 ]
 
 [[package]]
