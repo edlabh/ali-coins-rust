@@ -7,6 +7,7 @@
 
 mod export_import;
 mod notify_test;
+mod run_all;
 mod run_checkin;
 mod run_tasks;
 
@@ -71,6 +72,7 @@ fn main() -> ExitCode {
     match raw.get(1).map(String::as_str) {
         Some("export-session") => return export_import::run_export(&raw[2..]),
         Some("import-session") => return export_import::run_import(&raw[2..]),
+        Some("all") => return run_all::run(&raw[2..]),
         Some("checkin") => return run_checkin::run(&raw[2..]),
         Some("notify-test") => return notify_test::run(&raw[2..]),
         Some("tasks") => return run_tasks::run(&raw[2..]),
@@ -85,7 +87,7 @@ fn main() -> ExitCode {
 
     if !matches.get_flag("dry-run") {
         eprintln!(
-            "ali-coins-rust {} — use --dry-run, checkin, export-session ou import-session.",
+            "ali-coins-rust {} — use --dry-run, all, checkin, tasks, export-session ou import-session.",
             env!("CARGO_PKG_VERSION")
         );
         return ExitCode::from(1);

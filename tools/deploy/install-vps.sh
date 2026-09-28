@@ -24,6 +24,28 @@ for file in credentials.env session.json.enc session_meta.json; do
 done
 chmod 600 "$DEST_DIR"/credentials.env "$DEST_DIR"/session.json.enc "$DEST_DIR"/session_meta.json 2>/dev/null || true
 
+# Wrapper de execução unificada (check-in + tarefas, notificação única) com
+# rotação de log e UMA retentativa quando a execução falha com exit 1.
+cat > "$DEST_DIR/run_all.sh" <<'WRAP'
+#!/usr/bin/env bash
+set -uo pipefail
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LOG="$DIR/cron.log"
+if [ -f "$LOG" ] && [ "$(stat -c%s "$LOG" 2>/dev/null || echo 0)" -gt 5242880 ]; then
+  mv "$LOG" "$LOG.1"
+fi
+"$DIR/ali-coins" all "$@"
+CODE=$?
+if [ "$CODE" -eq 1 ]; then
+  echo "[run_all.sh] Execução falhou (exit 1). Aguardando 10s para retentativa única..." >&2
+  sleep 10
+  "$DIR/ali-coins" all --no-delay "$@"
+  CODE=$?
+fi
+exit "$CODE"
+WRAP
+chmod 0755 "$DEST_DIR/run_all.sh"
+
 # Equivalente local de 08:30 BRT (fallback para crons sem CRON_TZ).
 read -r FALLBACK_MIN FALLBACK_HOUR < <(python3 - <<'PY'
 from datetime import datetime, date
@@ -43,10 +65,10 @@ block=$(cat <<EOF
 $MARK_BEGIN
 # Horário de Brasília (sem drift de DST): CRON_TZ exige cron com suporte (Debian/Ubuntu ok).
 CRON_TZ=America/Sao_Paulo
-# Execução unificada (check-in + tarefas). Log append em cron.log.
-30 8 * * * cd $DEST_DIR && PATH=$DEST_DIR:\$PATH ./ali-coins checkin --json >> $DEST_DIR/cron.log 2>&1 && PATH=$DEST_DIR:\$PATH ./ali-coins tasks --json >> $DEST_DIR/cron.log 2>&1
+# Execução unificada (check-in + tarefas, notificação única). Log append em cron.log.
+30 8 * * * cd $DEST_DIR && PATH=$DEST_DIR:\$PATH ./run_all.sh --json >> $DEST_DIR/cron.log 2>&1
 # Fallback caso CRON_TZ não seja suportado (remova a linha acima e use esta):
-# $FALLBACK_MIN $FALLBACK_HOUR * * * cd $DEST_DIR && ./ali-coins checkin --json >> $DEST_DIR/cron.log 2>&1
+# $FALLBACK_MIN $FALLBACK_HOUR * * * cd $DEST_DIR && ./run_all.sh --json >> $DEST_DIR/cron.log 2>&1
 $MARK_END
 EOF
 )
