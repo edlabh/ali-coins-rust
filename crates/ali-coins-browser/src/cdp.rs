@@ -13,7 +13,9 @@ use chromiumoxide::browser::{Browser as CdpBrowser, BrowserConfig};
 use chromiumoxide::cdp::browser_protocol::emulation::{
     SetDeviceMetricsOverrideParams, SetLocaleOverrideParams, SetTouchEmulationEnabledParams,
 };
-use chromiumoxide::cdp::browser_protocol::page::AddScriptToEvaluateOnNewDocumentParams;
+use chromiumoxide::cdp::browser_protocol::page::{
+    AddScriptToEvaluateOnNewDocumentParams, NavigateParams,
+};
 use chromiumoxide::page::{Page as CdpPage, ScreenshotParams};
 use futures::StreamExt as _;
 use serde::de::DeserializeOwned;
@@ -39,7 +41,11 @@ impl CdpDriver {
     }
 
     fn build_config(options: &LaunchOptions) -> Result<BrowserConfig, BrowserError> {
-        let mut builder = BrowserConfig::builder();
+        let mut builder = BrowserConfig::builder()
+            // VM pequena (1 vCPU): comandos CDP e launch podem demorar bem mais
+            // que o default do chromiumoxide (30s).
+            .request_timeout(Duration::from_secs(180))
+            .launch_timeout(Duration::from_secs(90));
         builder = if options.headless {
             builder.new_headless_mode()
         } else {
@@ -139,12 +145,29 @@ impl Browser for CdpBrowserHandle {
 #[async_trait]
 impl Page for CdpPageHandle {
     async fn goto(&self, url: &str, options: &NavOptions) -> Result<(), BrowserError> {
+        // Equivalente a waitUntil: 'domcontentloaded' do oráculo, com polling de
+        // readyState: não espera o "load" completo (páginas pesadas em VPS
+        // pequena demoram dezenas de segundos) nem depende de comando CDP
+        // bloqueado pelo renderer ocupado.
         let timeout = options.timeout.unwrap_or(Duration::from_secs(35));
-        let navigation = self.page.goto(url);
-        match tokio::time::timeout(timeout, navigation).await {
-            Ok(Ok(_)) => Ok(()),
-            Ok(Err(err)) => Err(BrowserError::Navigation(err.to_string())),
-            Err(_) => Err(BrowserError::Timeout(format!("goto {url}"))),
+        self.page
+            .execute(NavigateParams::new(url))
+            .await
+            .map_err(|err| BrowserError::Navigation(err.to_string()))?;
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        let deadline = Instant::now() + timeout;
+        loop {
+            if let Ok(result) = self.page.evaluate_expression("document.readyState").await {
+                if let Ok(state) = result.into_value::<String>() {
+                    if state == "interactive" || state == "complete" {
+                        return Ok(());
+                    }
+                }
+            }
+            if Instant::now() >= deadline {
+                return Err(BrowserError::Timeout(format!("goto {url}")));
+            }
+            tokio::time::sleep(Duration::from_millis(250)).await;
         }
     }
 
