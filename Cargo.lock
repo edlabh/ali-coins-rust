@@ -51,6 +51,10 @@ name = "ali-coins-browser"
 version = "0.1.0"
 dependencies = [
  "ali-coins-core",
+ "regex",
+ "serde",
+ "serde_json",
+ "url",
 ]
 
 [[package]]

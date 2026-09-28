@@ -1,0 +1,12 @@
+{
+  "generator": "tools/parity/node/gen_device.mjs",
+  "userAgent": "Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.8010.12 Mobile Safari/537.36",
+  "viewport": {
+    "width": 412,
+    "height": 839
+  },
+  "deviceScaleFactor": 2.625,
+  "isMobile": true,
+  "hasTouch": true,
+  "locale": "pt-BR"
+}
