@@ -17,7 +17,7 @@ use thiserror::Error;
 
 /// URL desktop da página de moedas (painel de tarefas).
 pub const DESKTOP_COIN_URL: &str =
-    "https://www.aliexpress.com/p/coin-index/index.html?_immersiveMode=true&from=pc302";
+    "https://m.aliexpress.com/p/coin-index/index.html?_immersiveMode=true&from=pc302";
 
 /// Seletores da gaveta de tarefas.
 pub mod selectors {
@@ -128,31 +128,94 @@ pub struct TasksRun {
     pub actions: u32,
 }
 
-/// Abre a gaveta de tarefas (se ainda não estiver aberta).
-pub async fn open_drawer(page: &dyn Page, timeout: Duration) -> Result<bool, TasksError> {
-    if page
-        .wait_for_selector(selectors::DRAWER_CONTAINER, Duration::from_millis(400))
+/// Clica no primeiro botão visível cujo texto casa (fallback do `:has-text`).
+async fn click_by_text(page: &dyn Page, needles: &[&str]) -> bool {
+    let script = format!(
+        "(() => {{ const needles = {}; const nodes = document.querySelectorAll('button, [role=\"button\"], div'); \
+         for (const el of nodes) {{ const text = (el.textContent || '').trim(); \
+         if (!needles.some((n) => text.toLowerCase().includes(n.toLowerCase()))) continue; \
+         const r = el.getBoundingClientRect(); if (r.width <= 0 || r.height <= 0 || el.offsetParent === null) continue; \
+         el.click(); return true; }} return false; }})()",
+        serde_json::to_string(needles).unwrap_or_else(|_| "[]".to_string())
+    );
+    page.eval_raw(&script)
         .await
-        .is_ok()
-    {
-        return Ok(true);
-    }
-    for opener in selectors::OPEN_DRAWER {
+        .ok()
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false)
+}
+
+/// Abre a gaveta de tarefas (espera o SPA e tenta CSS + texto).
+pub async fn open_drawer(page: &dyn Page, timeout: Duration) -> Result<bool, TasksError> {
+    let deadline = std::time::Instant::now() + timeout;
+    loop {
         if page
-            .wait_for_selector(opener, Duration::from_millis(400))
+            .wait_for_selector(selectors::DRAWER_CONTAINER, Duration::from_millis(400))
             .await
             .is_ok()
         {
-            let _ = page.click_selector(opener).await;
+            return Ok(true);
+        }
+        for opener in selectors::OPEN_DRAWER {
             if page
-                .wait_for_selector(selectors::DRAWER_CONTAINER, timeout)
+                .wait_for_selector(opener, Duration::from_millis(200))
                 .await
                 .is_ok()
             {
-                return Ok(true);
+                let _ = page.click_selector(opener).await;
+                if page
+                    .wait_for_selector(selectors::DRAWER_CONTAINER, Duration::from_secs(3))
+                    .await
+                    .is_ok()
+                {
+                    return Ok(true);
+                }
             }
         }
+        if click_by_text(
+            page,
+            &["Ganhe mais moedas", "Earn more coins", "mais moedas"],
+        )
+        .await
+            && page
+                .wait_for_selector(selectors::DRAWER_CONTAINER, Duration::from_secs(3))
+                .await
+                .is_ok()
+        {
+            return Ok(true);
+        }
+        if std::time::Instant::now() >= deadline {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(500)).await;
     }
+    let diagnostics = page
+        .eval_raw(
+            "(function () { \
+             const classes = Array.from(document.querySelectorAll('*')) \
+               .map((el) => String(el.className || '')) \
+               .filter((name) => /task|coin|sign/i.test(name)); \
+             const unique = Array.from(new Set(classes)).slice(0, 20); \
+             const text = document.body ? document.body.innerText : ''; \
+             return JSON.stringify({ \
+               e2e_task: document.querySelectorAll('.e2e_task').length, \
+               e2e_normal_task: document.querySelectorAll('.e2e_normal_task').length, \
+               classes: unique, \
+               text: text.split(/\\s+/).join(' ').slice(0, 300) \
+             }); })()",
+        )
+        .await
+        .ok()
+        .and_then(|value| value.as_str().map(str::to_string))
+        .unwrap_or_default();
+    ali_coins_core::logging::global().info(
+        &format!(
+            "Gaveta não encontrada. URL: {} | título: {} | diagnóstico: {diagnostics}",
+            page.url().await.unwrap_or_default(),
+            page.title().await.unwrap_or_default()
+        ),
+        &[],
+    );
     Ok(false)
 }
 
@@ -202,11 +265,56 @@ fn click_task_button(index: usize) -> String {
     )
 }
 
+/// Aguarda os itens da gaveta renderizarem (skeleton do verifier).
+pub async fn wait_for_tasks(page: &dyn Page, timeout: Duration) -> Vec<TaskItem> {
+    let deadline = std::time::Instant::now() + timeout;
+    loop {
+        if let Ok(tasks) = extract_tasks(page).await {
+            if !tasks.is_empty() {
+                return tasks;
+            }
+        }
+        if std::time::Instant::now() >= deadline {
+            return Vec::new();
+        }
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    }
+}
+
 /// Executa as tarefas de forma conservadora (claims, busca e navegação).
 pub async fn run_tasks(page: &dyn Page, options: &TasksOptions) -> Result<TasksRun, TasksError> {
     goto_with_retry(page, DESKTOP_COIN_URL).await?;
     if !open_drawer(page, Duration::from_secs(10)).await? {
         return Err(TasksError::DrawerMissing);
+    }
+    let initial = wait_for_tasks(page, Duration::from_secs(15)).await;
+    if initial.is_empty() {
+        let snippet = page
+            .eval_raw(
+                "(() => { const el = document.querySelector('.e2e_task'); return el ? (el.innerText || '').split(/\\s+/).join(' ').slice(0, 400) : ''; })()",
+            )
+            .await
+            .ok()
+            .and_then(|value| value.as_str().map(str::to_string))
+            .unwrap_or_default();
+        ali_coins_core::logging::global().info(
+            &format!("Gaveta sem itens após 15s. Conteúdo: {snippet}"),
+            &[],
+        );
+        // Guarda o HTML da gaveta em scratch/ para alinhar seletores depois.
+        if let Ok(html) = page
+            .eval_raw("document.querySelector('.e2e_task') ? document.querySelector('.e2e_task').outerHTML : ''")
+            .await
+        {
+            if let Some(html) = html.as_str() {
+                let scratch = std::path::Path::new("scratch");
+                let _ = ali_coins_core::secure_fs::prepare_output_dir_for_dump(scratch);
+                let _ = ali_coins_core::secure_fs::safe_write_file(
+                    &scratch.join("tasks-drawer.html"),
+                    html.as_bytes(),
+                );
+            }
+        }
     }
 
     let mut attempts: HashMap<String, u32> = HashMap::new();

@@ -129,13 +129,15 @@ pub async fn seed_storage_state(page: &CdpPage, state: &Value) -> Result<(), Bro
             if entries.is_empty() {
                 continue;
             }
+            // localStorage só existe em origens http(s) (about:blank é opaco):
+            // falhas/restrições não devem impedir o seed dos cookies.
             let script = format!(
-                "(() => {{ const entries = {}; for (const e of entries) localStorage.setItem(e.name, e.value); return entries.length; }})()",
+                "(() => {{ try {{ if (!/^https?:/.test(location.protocol)) return 0; \
+                 const entries = {}; for (const e of entries) localStorage.setItem(e.name, e.value); \
+                 return entries.length; }} catch (error) {{ return 0; }} }})()",
                 serde_json::to_string(entries).unwrap_or_else(|_| "[]".to_string())
             );
-            page.evaluate_expression(script)
-                .await
-                .map_err(|err| BrowserError::Evaluate(err.to_string()))?;
+            let _ = page.evaluate_expression(script).await;
         }
     }
     Ok(())

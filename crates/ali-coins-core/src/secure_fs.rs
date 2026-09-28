@@ -96,6 +96,17 @@ pub fn safe_chmod_600(path: &Path) -> io::Result<()> {
     Ok(())
 }
 
+/// Cria um diretório de saída com `0700` (dump de diagnóstico).
+pub fn prepare_output_dir_for_dump(dir: &Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(dir)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        let _ = std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -104,6 +104,19 @@ pub fn run(args: &[String]) -> StdExitCode {
             page.enable_resource_blocking(config.allow_media)
                 .await
                 .map_err(|error| error.to_string())?;
+            // A gaveta de tarefas vive na página mobile; emula o Pixel 7 como o
+            // fluxo unificado do oráculo faz (check-in -> tarefas reaproveitam a página).
+            page.set_device_profile(&ali_coins_browser::launch::pixel7_profile())
+                .await
+                .map_err(|error| error.to_string())?;
+            // Pré-navegação para a origem do painel: permite semear o localStorage
+            // e validar os cookies (Network.getCookies não lista nada em about:blank).
+            let _ = page
+                .goto(
+                    ali_coins_flows::tasks_runner::DESKTOP_COIN_URL,
+                    &ali_coins_browser::driver::NavOptions::default(),
+                )
+                .await;
             page.seed_storage_state(&session_data)
                 .await
                 .map_err(|error| error.to_string())?;
