@@ -281,13 +281,36 @@ pub async fn wait_for_tasks(page: &dyn Page, timeout: Duration) -> Vec<TaskItem>
     }
 }
 
+/// Espera itens com reload-retry (o verifier recarrega quando o skeleton persiste).
+pub async fn wait_for_tasks_with_reload(page: &dyn Page, timeout: Duration) -> Vec<TaskItem> {
+    for attempt in 0..5_u32 {
+        let tasks = wait_for_tasks(page, Duration::from_secs(6)).await;
+        if !tasks.is_empty() {
+            return tasks;
+        }
+        if attempt == 4 {
+            break;
+        }
+        ali_coins_core::logging::global().info(
+            &format!(
+                "Skeleton persistente; recarregando a página (tentativa {}).",
+                attempt + 2
+            ),
+            &[],
+        );
+        let _ = goto_with_retry(page, DESKTOP_COIN_URL).await;
+        let _ = open_drawer(page, timeout.min(Duration::from_secs(10))).await;
+    }
+    Vec::new()
+}
+
 /// Executa as tarefas de forma conservadora (claims, busca e navegação).
 pub async fn run_tasks(page: &dyn Page, options: &TasksOptions) -> Result<TasksRun, TasksError> {
     goto_with_retry(page, DESKTOP_COIN_URL).await?;
     if !open_drawer(page, Duration::from_secs(10)).await? {
         return Err(TasksError::DrawerMissing);
     }
-    let initial = wait_for_tasks(page, Duration::from_secs(15)).await;
+    let initial = wait_for_tasks_with_reload(page, Duration::from_secs(15)).await;
     if initial.is_empty() {
         let snippet = page
             .eval_raw(
