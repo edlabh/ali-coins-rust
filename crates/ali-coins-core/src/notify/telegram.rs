@@ -13,6 +13,11 @@
 //! snapshots está registrada como pendência em `docs/05-divergencias-conhecidas.md`.
 
 use super::http::SafeHttpClient;
+use crate::config::mask_user;
+use crate::report::{
+    CheckinInput, TasksInput, compute_checkin_coins_gained, compute_tasks_coins_gained,
+};
+use crate::time::{format_date, format_duration};
 use rand::Rng as _;
 use serde_json::{Map, Value};
 use std::time::Duration;
@@ -251,6 +256,158 @@ pub fn build_message(event: TelegramEvent, ctx: &TelegramContext<'_>) -> String 
     truncate_telegram_message(&format!("{body}{}", footer(ctx)))
 }
 
+/// Inteiro do payload (número, string com dígitos ou ausente → 0).
+fn payload_i64(value: Option<&Value>) -> i64 {
+    match value {
+        Some(Value::Number(number)) => number.as_i64().unwrap_or(0),
+        Some(Value::String(text)) => text
+            .chars()
+            .filter(char::is_ascii_digit)
+            .collect::<String>()
+            .parse()
+            .unwrap_or(0),
+        _ => 0,
+    }
+}
+
+/// Texto não vazio do payload (com `trim`).
+fn payload_text(value: Option<&Value>) -> Option<&str> {
+    value
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|text| !text.is_empty())
+}
+
+/// Sequência exibida na mensagem (número, texto ou `N/D`).
+fn payload_streak(value: Option<&Value>) -> String {
+    match value {
+        Some(Value::Number(number)) => number.to_string(),
+        Some(Value::String(text)) if !text.trim().is_empty() => text.clone(),
+        _ => "N/D".to_string(),
+    }
+}
+
+/// Duração do relatório com os fallbacks do oráculo.
+fn payload_duration(report: &Value, meta: Option<&Value>) -> String {
+    let non_zero = |value: Option<&str>| {
+        value
+            .map(str::trim)
+            .filter(|text| !text.is_empty() && *text != "0s" && *text != "N/D")
+            .map(str::to_string)
+    };
+    let from_meta = non_zero(payload_text(
+        meta.and_then(|meta| meta.get("totalDuration")),
+    ));
+    let from_checkin = non_zero(payload_text(
+        report
+            .get("checkin")
+            .and_then(|checkin| checkin.get("duration")),
+    ));
+    let from_tasks = non_zero(payload_text(
+        report.get("tasks").and_then(|tasks| tasks.get("duration")),
+    ));
+    if let Some(duration) = from_meta.or(from_checkin).or(from_tasks) {
+        return duration;
+    }
+    let parse_iso = |text: &str| {
+        chrono::DateTime::parse_from_rfc3339(text)
+            .ok()
+            .map(|dt| dt.timestamp_millis())
+    };
+    let start = payload_text(meta.and_then(|meta| meta.get("startTime"))).and_then(parse_iso);
+    let end = payload_text(meta.and_then(|meta| meta.get("endTime"))).and_then(parse_iso);
+    match (start, end) {
+        (Some(start), Some(end)) if end > start => format_duration(end - start),
+        _ => "0s".to_string(),
+    }
+}
+
+/// Mensagem do relatório unificado no formato do oráculo (`notify.js` seção 7).
+///
+/// Mesmo formato para o dia recém-coletado e para "já coletado" (emoji ℹ️),
+/// com os mesmos fallbacks de saldo/duração/streak do Node.
+#[must_use]
+pub fn build_unified_report_message(
+    report: &Value,
+    host: &str,
+    version: &str,
+    event: TelegramEvent,
+) -> String {
+    let meta = report.get("meta");
+    let checkin_value = report.get("checkin").filter(|value| !value.is_null());
+    let tasks_value = report.get("tasks").filter(|value| !value.is_null());
+    let checkin_input: Option<CheckinInput> =
+        checkin_value.and_then(|value| serde_json::from_value(value.clone()).ok());
+    let tasks_input: Option<TasksInput> =
+        tasks_value.and_then(|value| serde_json::from_value(value.clone()).ok());
+
+    let checkin_coins = meta
+        .and_then(|meta| meta.get("checkinCoinsGained"))
+        .map_or_else(
+            || compute_checkin_coins_gained(checkin_input.as_ref()),
+            |value| payload_i64(Some(value)),
+        );
+    let tasks_coins = meta
+        .and_then(|meta| meta.get("tasksCoinsGained"))
+        .map_or_else(
+            || compute_tasks_coins_gained(tasks_input.as_ref(), checkin_input.as_ref()),
+            |value| payload_i64(Some(value)),
+        );
+    let total_coins = meta
+        .and_then(|meta| meta.get("totalCoinsGained"))
+        .map_or(checkin_coins + tasks_coins, |value| {
+            payload_i64(Some(value))
+        });
+
+    let already_collected = matches!(event, TelegramEvent::AlreadyCollected)
+        || (checkin_input
+            .as_ref()
+            .and_then(|checkin| checkin.already_collected)
+            .unwrap_or(false)
+            && tasks_coins == 0);
+    let title_emoji = if already_collected { "ℹ️" } else { "✅" };
+
+    let raw_user = payload_text(report.get("user")).unwrap_or("");
+    let user = if raw_user.is_empty() {
+        "desconhecida".to_string()
+    } else if raw_user.contains("***") {
+        raw_user.to_string()
+    } else {
+        mask_user(raw_user)
+    };
+
+    let streak = payload_streak(checkin_value.and_then(|checkin| checkin.get("streakDays")));
+
+    let from_meta = payload_text(meta.and_then(|meta| meta.get("finalBalance")));
+    let saldo = match from_meta {
+        Some(balance) if balance != "N/D" => balance.to_string(),
+        _ => payload_text(checkin_value.and_then(|checkin| checkin.get("totalBalance")))
+            .map_or_else(|| "N/D".to_string(), |total| format!("{total} moedas")),
+    };
+    let saldo = if saldo != "N/D" && !saldo.contains("moedas") {
+        format!("{saldo} moedas")
+    } else {
+        saldo
+    };
+
+    let duration = payload_duration(report, meta);
+    let host_line = escape_html(&format!("{host} (v{version})"));
+    let date = format_date(chrono::Utc::now());
+    let body = format!(
+        "{title_emoji} ali-coins — {date}\n\
+         👤 <b>Conta:</b> <code>{}</code>\n\
+         🖥️ <b>Host:</b> <code>{host_line}</code>\n\
+         🪙 Ganhas hoje: +{total_coins} moedas (check-in +{checkin_coins} / tarefas +{tasks_coins})\n\
+         📅 Sequência: {} dias\n\
+         💰 Saldo: {}\n\
+         ⏱️ Duração: {duration}",
+        escape_html(&user),
+        escape_html(&streak),
+        escape_html(&saldo),
+    );
+    truncate_telegram_message(&body)
+}
+
 #[allow(
     clippy::cast_possible_truncation,
     clippy::cast_sign_loss,
@@ -473,5 +630,96 @@ mod tests {
     #[test]
     fn strip_tags_e_entidades() {
         assert_eq!(strip_html_tags("<b>a &amp; b</b>"), "a & b");
+    }
+
+    #[test]
+    fn mensagem_unificada_no_formato_do_oraculo() {
+        let report = serde_json::json!({
+            "type": "unified_report",
+            "user": "agiler@example.com",
+            "checkin": {
+                "alreadyCollected": false,
+                "streakDays": 225,
+                "totalBalance": "2980"
+            },
+            "tasks": { "duration": "7m 00s" },
+            "meta": {
+                "checkinCoinsGained": 40,
+                "tasksCoinsGained": 56,
+                "totalCoinsGained": 96,
+                "finalBalance": "2980 moedas",
+                "totalDuration": "8m 53s"
+            }
+        });
+        let message =
+            build_unified_report_message(&report, "oracle-vm", "1.7.1", TelegramEvent::Success);
+        let expected = format!(
+            "✅ ali-coins — {}\n\
+             👤 <b>Conta:</b> <code>ag***@example.com</code>\n\
+             🖥️ <b>Host:</b> <code>oracle-vm (v1.7.1)</code>\n\
+             🪙 Ganhas hoje: +96 moedas (check-in +40 / tarefas +56)\n\
+             📅 Sequência: 225 dias\n\
+             💰 Saldo: 2980 moedas\n\
+             ⏱️ Duração: 8m 53s",
+            crate::time::format_date(chrono::Utc::now())
+        );
+        assert_eq!(message, expected);
+    }
+
+    #[test]
+    fn mensagem_unificada_ja_coletado_mantem_formato() {
+        let report = serde_json::json!({
+            "type": "unified_report",
+            "user": "edelanoali@gmail.com",
+            "checkin": {
+                "alreadyCollected": true,
+                "streakDays": 1,
+                "totalBalance": "N/D"
+            },
+            "tasks": null,
+            "meta": {
+                "checkinCoinsGained": 0,
+                "tasksCoinsGained": 0,
+                "totalCoinsGained": 0,
+                "finalBalance": "N/D",
+                "totalDuration": "1m 05s"
+            }
+        });
+        let message = build_unified_report_message(
+            &report,
+            "vm-ali-rust",
+            "0.1.0",
+            TelegramEvent::AlreadyCollected,
+        );
+        assert!(message.starts_with("ℹ️ ali-coins — "));
+        assert!(message.contains("👤 <b>Conta:</b> <code>ed***@gmail.com</code>"));
+        assert!(message.contains("🖥️ <b>Host:</b> <code>vm-ali-rust (v0.1.0)</code>"));
+        assert!(message.contains("🪙 Ganhas hoje: +0 moedas (check-in +0 / tarefas +0)"));
+        assert!(message.contains("📅 Sequência: 1 dias"));
+        assert!(message.contains("💰 Saldo: N/D"));
+        assert!(message.contains("⏱️ Duração: 1m 05s"));
+    }
+
+    #[test]
+    fn mensagem_unificada_sem_meta_usa_fallbacks() {
+        // Payload mínimo: sem meta, com saldo no check-in e durações nas etapas.
+        let report = serde_json::json!({
+            "type": "unified_report",
+            "user": "fulano@example.com",
+            "checkin": {
+                "alreadyCollected": false,
+                "streakDays": 2,
+                "totalBalance": "1234",
+                "duration": "1m 20s"
+            },
+            "tasks": null
+        });
+        let message =
+            build_unified_report_message(&report, "vps-1", "0.2.0", TelegramEvent::Success);
+        assert!(message.contains("👤 <b>Conta:</b> <code>fu***@example.com</code>"));
+        assert!(message.contains("💰 Saldo: 1234 moedas"));
+        assert!(message.contains("⏱️ Duração: 1m 20s"));
+        // Check-in com 2 dias → 15 moedas pelo oráculo.
+        assert!(message.contains("🪙 Ganhas hoje: +15 moedas (check-in +15 / tarefas +0)"));
     }
 }

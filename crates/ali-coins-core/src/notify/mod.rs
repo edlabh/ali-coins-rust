@@ -11,8 +11,8 @@ pub use heartbeat::{
 };
 pub use http::{HttpError, SafeHttpClient, SafeResponse};
 pub use telegram::{
-    TelegramConfig, TelegramContext, TelegramEvent, TelegramSendResult, build_message, escape_html,
-    send_telegram, truncate_telegram_message,
+    TelegramConfig, TelegramContext, TelegramEvent, TelegramSendResult, build_message,
+    build_unified_report_message, escape_html, send_telegram, truncate_telegram_message,
 };
 pub use webhooks::{
     WebhookTracker, encode_webhook_payload, format_webhook_body, sanitize_webhook_payload,

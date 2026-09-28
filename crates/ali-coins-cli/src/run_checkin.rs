@@ -10,7 +10,8 @@ use ali_coins_browser::driver::{BrowserDriver as _, LaunchOptions};
 use ali_coins_browser::launch::{ChromiumArgsInput, build_chromium_args, pixel7_profile};
 use ali_coins_core::lock::{LockError, LockOptions, acquire};
 use ali_coins_core::notify::{
-    SafeHttpClient, TelegramConfig, TelegramContext, TelegramEvent, build_message, send_telegram,
+    SafeHttpClient, TelegramConfig, TelegramContext, TelegramEvent, build_message,
+    build_unified_report_message, send_telegram,
 };
 use ali_coins_core::report::{
     CheckinInput, StreakValue, UnifiedMeta, build_unified_report_payload, checkin_coins_from_streak,
@@ -21,7 +22,7 @@ use ali_coins_flows::checkin::{CheckinOptions, run_checkin};
 use ali_coins_flows::login::LoginOptions;
 use std::io::IsTerminal as _;
 use std::process::ExitCode as StdExitCode;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 /// Perfil de browser novo por execução (o oráculo usa contexto descartável).
 fn fresh_profile_dir() -> std::path::PathBuf {
@@ -166,9 +167,13 @@ pub fn run(args: &[String]) -> StdExitCode {
                 detect_timeout: element_timeout,
                 nav_timeout: Duration::from_millis(config.nav_timeout),
             };
+            let step_started = Instant::now();
             let result = run_checkin(&*page, &account.user, &account.password, &checkin_options)
                 .await
                 .map_err(|error| format!("{error}"))?;
+            let step_duration = ali_coins_core::time::format_duration(
+                i64::try_from(step_started.elapsed().as_millis()).unwrap_or(i64::MAX),
+            );
 
             // Persiste a sessão renovada (cookies + localStorage filtrado).
             if let Ok(state) = page.storage_state().await {
@@ -194,7 +199,7 @@ pub fn run(args: &[String]) -> StdExitCode {
                 coins_gained_today: coins.map(|value| value.to_string()),
                 streak_days: Some(streak_value),
                 total_balance: result.total_balance.clone(),
-                duration: None,
+                duration: Some(step_duration.clone()),
                 ..CheckinInput::default()
             };
             let payload = build_unified_report_payload(
@@ -202,6 +207,8 @@ pub fn run(args: &[String]) -> StdExitCode {
                 None,
                 &UnifiedMeta {
                     user: Some(&account.user),
+                    total_duration: Some(step_duration.as_str()),
+                    step1_duration: Some(step_duration.as_str()),
                     ..UnifiedMeta::default()
                 },
             );
@@ -268,7 +275,17 @@ pub fn run(args: &[String]) -> StdExitCode {
                         timeout_ms: config.telegram_timeout_ms,
                         api_base: String::new(),
                     };
-                    let message = build_message(event, &context);
+                    let message = match event {
+                        TelegramEvent::Success | TelegramEvent::AlreadyCollected => {
+                            build_unified_report_message(
+                                &payload,
+                                &host,
+                                env!("CARGO_PKG_VERSION"),
+                                event,
+                            )
+                        }
+                        _ => build_message(event, &context),
+                    };
                     match send_telegram(&client, &telegram_config, &message).await {
                         result if result.ok => {
                             logging::global().info("Notificação Telegram enviada.", &[]);
