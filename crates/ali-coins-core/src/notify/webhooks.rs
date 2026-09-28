@@ -17,38 +17,50 @@ pub const WEBHOOK_MAX_PAYLOAD_BYTES: usize = 32 * 1024;
 /// Profundidade máxima antes de marcar como truncado.
 pub const MAX_PAYLOAD_DEPTH: usize = 6;
 
-/// Remove dados sensíveis e mascara chaves de usuário recursivamente.
+/// Chaves que NUNCA devem sair para webhooks externos.
+pub const WEBHOOK_FORBIDDEN_KEYS: [&str; 4] = ["sessiondata", "session", "cookies", "storagestate"];
+/// Chaves de identificação de conta mascaradas antes do envio externo.
+pub const WEBHOOK_USER_KEYS: [&str; 5] = ["user", "useremail", "email", "maskeduser", "account"];
+/// Marcador de profundidade excedida (contrato do oráculo).
+pub const MAX_DEPTH_MARKER: &str = "[profundidade máxima excedida]";
+
+/// Remove dados sensíveis e mascara identificadores em contexto de usuário.
 #[must_use]
 pub fn sanitize_webhook_payload(value: &Value) -> Value {
-    sanitize_value(value, 0)
+    sanitize_value(value, 0, false)
 }
 
-fn sanitize_value(value: &Value, depth: usize) -> Value {
+fn sanitize_value(value: &Value, depth: usize, user_context: bool) -> Value {
     if depth > MAX_PAYLOAD_DEPTH {
-        return Value::String("[MAX_DEPTH]".to_string());
+        return Value::String(MAX_DEPTH_MARKER.to_string());
     }
     match value {
+        Value::String(text) => {
+            if user_context {
+                Value::String(mask_user_value(&Value::String(text.clone())))
+            } else {
+                Value::String(text.clone())
+            }
+        }
         Value::Array(items) => Value::Array(
             items
                 .iter()
-                .map(|item| sanitize_value(item, depth + 1))
+                .map(|item| sanitize_value(item, depth + 1, user_context))
                 .collect(),
         ),
         Value::Object(map) => {
             let mut out = Map::new();
             for (key, val) in map {
                 let lower = key.to_lowercase();
-                if matches!(
-                    lower.as_str(),
-                    "sessiondata" | "session" | "cookies" | "storagestate" | "storage_state"
-                ) {
+                if WEBHOOK_FORBIDDEN_KEYS.contains(&lower.as_str()) {
                     continue;
                 }
-                if lower == "user" {
-                    out.insert(key.clone(), Value::String(mask_user_value(val)));
-                } else {
-                    out.insert(key.clone(), sanitize_value(val, depth + 1));
-                }
+                let child_user_context =
+                    user_context || WEBHOOK_USER_KEYS.contains(&lower.as_str());
+                out.insert(
+                    key.clone(),
+                    sanitize_value(val, depth + 1, child_user_context),
+                );
             }
             Value::Object(out)
         }
@@ -202,7 +214,11 @@ mod tests {
             value = json!({ "nested": value });
         }
         let sanitized = sanitize_webhook_payload(&value);
-        assert!(sanitized.to_string().contains("[MAX_DEPTH]"));
+        assert!(
+            sanitized
+                .to_string()
+                .contains("profundidade máxima excedida")
+        );
     }
 
     #[test]

@@ -3,9 +3,12 @@
 //! Fixture: `tools/parity/fixtures/common/report.json`
 //! (gere com `./tools/parity/generate-fixtures.sh`).
 
+use ali_coins_core::notify::webhooks::sanitize_webhook_payload;
 use ali_coins_core::report::{
-    CheckinInput, ResolveStreakParams, StreakValue, TasksInput, compute_checkin_coins_gained,
-    compute_final_balance, compute_tasks_coins_gained, is_streak_break, resolve_streak_days,
+    AccountResultInput, CheckinInput, MultiAccountMeta, ResolveStreakParams, StreakValue,
+    TasksInput, UnifiedMeta, build_multi_account_report_payload, build_unified_report_payload,
+    compute_checkin_coins_gained, compute_final_balance, compute_tasks_coins_gained,
+    is_streak_break, resolve_streak_days,
 };
 use serde_json::Value;
 use std::path::Path;
@@ -119,6 +122,59 @@ fn funcoes_puras_de_relatorio_iguais_ao_oraculo() {
             "final checkin={:?} tasks={:?}",
             case["checkin"],
             case["tasks"]
+        );
+    }
+}
+
+fn parse_dt(raw: Option<&str>) -> Option<chrono::DateTime<chrono::Utc>> {
+    raw.and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
+        .map(|parsed| parsed.with_timezone(&chrono::Utc))
+}
+
+#[test]
+fn builders_e_sanitizacao_iguais_ao_oraculo() {
+    let doc = fixture();
+
+    for case in doc["buildUnifiedReportPayload"]
+        .as_array()
+        .expect("builders unified")
+    {
+        let checkin: Option<CheckinInput> = serde_json::from_value(case["checkin"].clone()).ok();
+        let tasks: Option<TasksInput> = serde_json::from_value(case["tasks"].clone()).ok();
+        let meta_json = &case["meta"];
+        let meta = UnifiedMeta {
+            user: meta_json["user"].as_str(),
+            total_duration: meta_json["totalDuration"].as_str(),
+            step1_duration: meta_json["step1Duration"].as_str(),
+            step2_duration: meta_json["step2Duration"].as_str(),
+            main_start_time: parse_dt(meta_json["mainStartTime"].as_str()),
+            main_end_time: parse_dt(meta_json["mainEndTime"].as_str()),
+            tasks_error: meta_json["tasksError"].as_str(),
+        };
+        let actual = build_unified_report_payload(checkin.as_ref(), tasks.as_ref(), &meta);
+        let actual_pretty = serde_json::to_string_pretty(&actual).unwrap();
+        let expected_pretty = serde_json::to_string_pretty(&case["payload"]).unwrap();
+        assert_eq!(actual_pretty, expected_pretty, "unified case={case:?}");
+    }
+
+    for case in doc["buildMultiAccountReportPayload"]
+        .as_array()
+        .expect("builders multi")
+    {
+        let accounts: Vec<AccountResultInput> =
+            serde_json::from_value(case["accountResults"].clone()).expect("contas");
+        let actual = build_multi_account_report_payload(&accounts, &MultiAccountMeta::default());
+        let actual_pretty = serde_json::to_string_pretty(&actual).unwrap();
+        let expected_pretty = serde_json::to_string_pretty(&case["payload"]).unwrap();
+        assert_eq!(actual_pretty, expected_pretty, "multi case={case:?}");
+    }
+
+    for case in doc["sanitizeWebhookPayload"].as_array().expect("sanitize") {
+        assert_eq!(
+            sanitize_webhook_payload(&case["value"]),
+            case["result"],
+            "sanitize value={:?}",
+            case["value"]
         );
     }
 }

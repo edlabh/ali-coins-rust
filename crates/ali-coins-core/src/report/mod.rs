@@ -4,7 +4,9 @@
 //! contabilidades de check-in/tarefas/saldo final. Os builders dos payloads e a
 //! renderização texto/webhook entram no incremento de notificações.
 
+use crate::time::format_duration;
 use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value};
 
 /// Valor de streak que o oráculo aceita como número ou texto (`N/D`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -50,9 +52,21 @@ pub struct CheckinInput {
     /// Dias de streak.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub streak_days: Option<StreakValue>,
+    /// Streak anterior (exibição/quebra).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub previous_streak_days: Option<StreakValue>,
     /// Saldo total exibido.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub total_balance: Option<String>,
+    /// Duração da etapa.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duration: Option<String>,
+    /// E-mail do usuário (quando o chamador não informa no meta).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub user_email: Option<String>,
+    /// Início da etapa (ISO).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start_time: Option<String>,
     /// Crédito vindo do extrato de hoje (contabiliza mesmo se alreadyCollected).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub checkin_coins_from_ledger: Option<bool>,
@@ -74,9 +88,27 @@ pub struct TasksInput {
     /// Saldo inicial capturado para as tarefas.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub initial_balance: Option<NumOrText>,
-    /// Saldo final exibido (`N/D` quando indisponível).
+    /// Saldo final da etapa (texto exibido).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub final_balance: Option<NumOrText>,
+    /// Saldo final consolidado (com sufixo "moedas" quando aplicável).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub final_coins: Option<String>,
+    /// Duração da etapa.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duration: Option<String>,
+    /// E-mail do usuário (fallback do relatório).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub user_email: Option<String>,
+    /// Início da etapa (ISO).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start_time: Option<String>,
+    /// Fim da etapa (ISO).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end_time: Option<String>,
+    /// Resultados individuais das tarefas.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub results: Option<Vec<Value>>,
 }
 
 /// Parâmetros de `resolveStreakDays`.
@@ -346,6 +378,434 @@ fn parse_digits_text(raw: &str) -> Option<i64> {
         return None;
     }
     digits.parse::<i64>().ok()
+}
+
+/// Meta do relatório unificado.
+#[derive(Debug, Clone, Default)]
+pub struct UnifiedMeta<'a> {
+    /// Usuário (senão vem de checkin/tasks).
+    pub user: Option<&'a str>,
+    /// Duração total já calculada.
+    pub total_duration: Option<&'a str>,
+    /// Duração da etapa 1.
+    pub step1_duration: Option<&'a str>,
+    /// Duração da etapa 2.
+    pub step2_duration: Option<&'a str>,
+    /// Início global.
+    pub main_start_time: Option<chrono::DateTime<chrono::Utc>>,
+    /// Fim global.
+    pub main_end_time: Option<chrono::DateTime<chrono::Utc>>,
+    /// Erro da etapa de tarefas.
+    pub tasks_error: Option<&'a str>,
+}
+
+/// Meta do relatório multi-conta.
+#[derive(Debug, Clone, Default)]
+pub struct MultiAccountMeta<'a> {
+    /// Duração total já calculada.
+    pub total_duration: Option<&'a str>,
+    /// Início global.
+    pub main_start_time: Option<chrono::DateTime<chrono::Utc>>,
+    /// Fim global.
+    pub main_end_time: Option<chrono::DateTime<chrono::Utc>>,
+    /// Marcador (não serializado; mantém o lifetime usado pelo chamador).
+    pub _marker: std::marker::PhantomData<&'a ()>,
+}
+
+/// Referência de conta nos resultados multi-conta.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AccountRef {
+    /// Usuário já mascarado.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub masked_user: Option<String>,
+}
+
+/// Resultado de uma conta no fluxo multi-conta.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AccountResultInput {
+    /// Conta (com usuário mascarado).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub account: Option<AccountRef>,
+    /// Usuário bruto (fallback).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub user: Option<String>,
+    /// Resultado do check-in.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub checkin_result: Option<CheckinInput>,
+    /// Resultado das tarefas.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tasks_result: Option<TasksInput>,
+    /// Erro da conta.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    /// Erro da etapa de tarefas.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tasks_error: Option<String>,
+    /// Sessão importada expirada.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub is_imported_session_expired: Option<bool>,
+    /// Início da conta (ISO).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub start_time: Option<String>,
+    /// Fim da conta (ISO).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end_time: Option<String>,
+    /// Próxima conta agendada (ISO).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_account_at: Option<String>,
+    /// Usuário da próxima conta.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_account_user: Option<String>,
+    /// Duração da conta.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duration: Option<String>,
+}
+
+/// Constrói o payload `unified_report` (contrato C-09).
+#[must_use]
+pub fn build_unified_report_payload(
+    checkin: Option<&CheckinInput>,
+    tasks: Option<&TasksInput>,
+    meta: &UnifiedMeta<'_>,
+) -> Value {
+    let final_balance = compute_final_balance(checkin, tasks);
+    let checkin_coins = compute_checkin_coins_gained(checkin);
+    let tasks_coins = compute_tasks_coins_gained(tasks, checkin);
+    let total_coins = checkin_coins + tasks_coins;
+
+    let total_duration = resolve_account_duration(
+        meta.total_duration,
+        meta.main_start_time,
+        meta.main_end_time,
+        checkin,
+        tasks,
+    )
+    .unwrap_or_else(|| "0s".to_string());
+    let step1 = non_zero_duration(meta.step1_duration)
+        .or_else(|| checkin.and_then(|checkin| non_zero_duration(checkin.duration.as_deref())));
+    let step2 = non_zero_duration(meta.step2_duration)
+        .or_else(|| tasks.and_then(|tasks| non_zero_duration(tasks.duration.as_deref())));
+
+    let user = meta
+        .user
+        .map(str::to_string)
+        .or_else(|| checkin.and_then(|checkin| checkin.user_email.clone()))
+        .or_else(|| tasks.and_then(|tasks| tasks.user_email.clone()));
+
+    let mut payload = Map::new();
+    payload.insert(
+        "type".to_string(),
+        Value::String("unified_report".to_string()),
+    );
+    if let Some(user) = user {
+        payload.insert("user".to_string(), Value::String(user));
+    }
+    payload.insert(
+        "checkin".to_string(),
+        checkin.map_or(Value::Null, checkin_json),
+    );
+    payload.insert("tasks".to_string(), tasks.map_or(Value::Null, tasks_json));
+
+    let mut meta_map = Map::new();
+    if let Some(start) = meta.main_start_time {
+        meta_map.insert("startTime".to_string(), Value::String(iso_millis(start)));
+    }
+    if let Some(end) = meta.main_end_time {
+        meta_map.insert("endTime".to_string(), Value::String(iso_millis(end)));
+    }
+    meta_map.insert("totalDuration".to_string(), Value::String(total_duration));
+    if let Some(step1) = step1 {
+        meta_map.insert("step1Duration".to_string(), Value::String(step1));
+    }
+    if let Some(step2) = step2 {
+        meta_map.insert("step2Duration".to_string(), Value::String(step2));
+    }
+    meta_map.insert("finalBalance".to_string(), Value::String(final_balance));
+    meta_map.insert("totalCoinsGained".to_string(), Value::from(total_coins));
+    meta_map.insert("checkinCoinsGained".to_string(), Value::from(checkin_coins));
+    meta_map.insert("tasksCoinsGained".to_string(), Value::from(tasks_coins));
+    if let Some(error) = meta.tasks_error.filter(|value| !value.is_empty()) {
+        meta_map.insert("tasksError".to_string(), Value::String(error.to_string()));
+    }
+    payload.insert("meta".to_string(), Value::Object(meta_map));
+    Value::Object(payload)
+}
+
+/// Constrói o payload `multi_account_report` (contrato C-09).
+#[must_use]
+pub fn build_multi_account_report_payload(
+    account_results: &[AccountResultInput],
+    meta: &MultiAccountMeta<'_>,
+) -> Value {
+    let accounts: Vec<Value> = account_results
+        .iter()
+        .map(|item| {
+            let checkin = item.checkin_result.as_ref();
+            let tasks = item.tasks_result.as_ref();
+            let final_balance = compute_final_balance(checkin, tasks);
+            let checkin_coins = compute_checkin_coins_gained(checkin);
+            let tasks_coins = compute_tasks_coins_gained(tasks, checkin);
+            let total_coins = checkin_coins + tasks_coins;
+
+            let account_duration = resolve_account_duration(
+                item.duration.as_deref(),
+                parse_iso(item.start_time.as_deref()),
+                parse_iso(item.end_time.as_deref()),
+                checkin,
+                tasks,
+            );
+
+            let mut account = Map::new();
+            let user = item
+                .account
+                .as_ref()
+                .and_then(|account| account.masked_user.clone())
+                .or_else(|| item.user.clone())
+                .unwrap_or_else(|| "Desconhecido".to_string());
+            account.insert("user".to_string(), Value::String(user));
+            account.insert(
+                "checkin".to_string(),
+                checkin.map_or(Value::Null, checkin_json),
+            );
+            account.insert("tasks".to_string(), tasks.map_or(Value::Null, tasks_json));
+            if let Some(error) = item.error.as_deref().filter(|value| !value.is_empty()) {
+                account.insert("error".to_string(), Value::String(error.to_string()));
+            }
+            if let Some(error) = item
+                .tasks_error
+                .as_deref()
+                .filter(|value| !value.is_empty())
+            {
+                account.insert("tasksError".to_string(), Value::String(error.to_string()));
+            }
+            account.insert(
+                "isImportedSessionExpired".to_string(),
+                Value::Bool(item.is_imported_session_expired.unwrap_or(false)),
+            );
+            if let Some(start) = item.start_time.as_deref().and_then(parse_iso_str) {
+                account.insert("startTime".to_string(), Value::String(iso_millis(start)));
+            }
+            if let Some(end) = item.end_time.as_deref().and_then(parse_iso_str) {
+                account.insert("endTime".to_string(), Value::String(iso_millis(end)));
+            }
+            if let Some(next_at) = item.next_account_at.as_deref().and_then(parse_iso_str) {
+                account.insert(
+                    "nextAccountAt".to_string(),
+                    Value::String(iso_millis(next_at)),
+                );
+            }
+            if let Some(next_user) = item
+                .next_account_user
+                .as_deref()
+                .filter(|value| !value.is_empty())
+            {
+                account.insert(
+                    "nextAccountUser".to_string(),
+                    Value::String(next_user.to_string()),
+                );
+            }
+            if let Some(account_duration) = account_duration {
+                account.insert("duration".to_string(), Value::String(account_duration));
+            }
+
+            let mut account_meta = Map::new();
+            account_meta.insert("finalBalance".to_string(), Value::String(final_balance));
+            account_meta.insert("totalCoinsGained".to_string(), Value::from(total_coins));
+            account_meta.insert("checkinCoinsGained".to_string(), Value::from(checkin_coins));
+            account_meta.insert("tasksCoinsGained".to_string(), Value::from(tasks_coins));
+            if let Some(error) = item
+                .tasks_error
+                .as_deref()
+                .filter(|value| !value.is_empty())
+            {
+                account_meta.insert("tasksError".to_string(), Value::String(error.to_string()));
+            }
+            account.insert("meta".to_string(), Value::Object(account_meta));
+            Value::Object(account)
+        })
+        .collect();
+
+    let successful_accounts = account_results
+        .iter()
+        .filter(|item| item.error.as_deref().is_none_or(str::is_empty))
+        .count();
+
+    let mut report_meta = Map::new();
+    let mut total_duration = meta
+        .total_duration
+        .filter(|value| !value.is_empty() && *value != "0s")
+        .map(str::to_string);
+    if total_duration.is_none() {
+        if let (Some(start), Some(end)) = (meta.main_start_time, meta.main_end_time) {
+            let ms = (end - start).num_milliseconds();
+            if ms > 0 {
+                total_duration = Some(format_duration(ms));
+            }
+        }
+    }
+    if let Some(start) = meta.main_start_time {
+        report_meta.insert("startTime".to_string(), Value::String(iso_millis(start)));
+    }
+    if let Some(end) = meta.main_end_time {
+        report_meta.insert("endTime".to_string(), Value::String(iso_millis(end)));
+    }
+    if let Some(total_duration) = total_duration {
+        report_meta.insert("totalDuration".to_string(), Value::String(total_duration));
+    }
+    report_meta.insert(
+        "totalAccounts".to_string(),
+        Value::from(account_results.len()),
+    );
+    report_meta.insert(
+        "successfulAccounts".to_string(),
+        Value::from(successful_accounts),
+    );
+
+    let mut payload = Map::new();
+    payload.insert(
+        "type".to_string(),
+        Value::String("multi_account_report".to_string()),
+    );
+    payload.insert("accounts".to_string(), Value::Array(accounts));
+    payload.insert("meta".to_string(), Value::Object(report_meta));
+    Value::Object(payload)
+}
+
+fn checkin_json(checkin: &CheckinInput) -> Value {
+    let mut map = Map::new();
+    if let Some(value) = checkin.already_collected {
+        map.insert("alreadyCollected".to_string(), Value::Bool(value));
+    }
+    if let Some(value) = &checkin.coins_gained_today {
+        map.insert("coinsGainedToday".to_string(), Value::String(value.clone()));
+    }
+    if let Some(streak) = checkin.streak_days.as_ref() {
+        map.insert("streakDays".to_string(), streak_to_value(streak));
+    }
+    if let Some(streak) = checkin.previous_streak_days.as_ref() {
+        map.insert("previousStreakDays".to_string(), streak_to_value(streak));
+    }
+    if let Some(value) = &checkin.total_balance {
+        map.insert("totalBalance".to_string(), Value::String(value.clone()));
+    }
+    if let Some(value) = &checkin.duration {
+        map.insert("duration".to_string(), Value::String(value.clone()));
+    }
+    Value::Object(map)
+}
+
+fn tasks_json(tasks: &TasksInput) -> Value {
+    let mut map = Map::new();
+    if let Some(results) = &tasks.results {
+        map.insert("results".to_string(), Value::Array(results.clone()));
+    }
+    if let Some(value) = &tasks.initial_balance {
+        map.insert("initialBalance".to_string(), num_or_text_to_value(value));
+    }
+    if let Some(value) = &tasks.final_balance {
+        map.insert("finalBalance".to_string(), num_or_text_to_value(value));
+    }
+    if let Some(value) = tasks.coins_gained {
+        map.insert("coinsGained".to_string(), number_to_value(value));
+    }
+    if let Some(value) = &tasks.final_coins {
+        map.insert("finalCoins".to_string(), Value::String(value.clone()));
+    }
+    if let Some(value) = &tasks.duration {
+        map.insert("duration".to_string(), Value::String(value.clone()));
+    }
+    Value::Object(map)
+}
+
+fn streak_to_value(streak: &StreakValue) -> Value {
+    match streak {
+        StreakValue::Number(number) => Value::from(*number),
+        StreakValue::Text(text) => Value::String(text.clone()),
+    }
+}
+
+fn num_or_text_to_value(value: &NumOrText) -> Value {
+    match value {
+        NumOrText::Number(number) => number_to_value(*number),
+        NumOrText::Text(text) => Value::String(text.clone()),
+    }
+}
+
+/// Serializa números inteiros como inteiros (paridade com o `JSON.stringify` do JS).
+fn number_to_value(value: f64) -> Value {
+    if value.is_finite() && value.fract() == 0.0 && value.abs() < 9_007_199_254_740_992.0 {
+        #[allow(clippy::cast_possible_truncation)]
+        return Value::from(value as i64);
+    }
+    Value::from(value)
+}
+
+fn non_zero_duration(value: Option<&str>) -> Option<String> {
+    value
+        .filter(|duration| !duration.is_empty() && *duration != "0s")
+        .map(str::to_string)
+}
+
+fn parse_iso(value: Option<&str>) -> Option<chrono::DateTime<chrono::Utc>> {
+    value.and_then(|raw| {
+        chrono::DateTime::parse_from_rfc3339(raw)
+            .ok()
+            .map(|parsed| parsed.with_timezone(&chrono::Utc))
+    })
+}
+
+fn parse_iso_str(value: &str) -> Option<chrono::DateTime<chrono::Utc>> {
+    parse_iso(Some(value))
+}
+
+fn iso_millis(value: chrono::DateTime<chrono::Utc>) -> String {
+    value.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string()
+}
+
+/// Resolve a duração do run/conta com os fallbacks do oráculo.
+fn resolve_account_duration(
+    provided: Option<&str>,
+    main_start: Option<chrono::DateTime<chrono::Utc>>,
+    main_end: Option<chrono::DateTime<chrono::Utc>>,
+    checkin: Option<&CheckinInput>,
+    tasks: Option<&TasksInput>,
+) -> Option<String> {
+    if let Some(duration) = non_zero_duration(provided) {
+        return Some(duration);
+    }
+    if let (Some(start), Some(end)) = (main_start, main_end) {
+        let ms = (end - start).num_milliseconds();
+        if ms > 0 {
+            return Some(format_duration(ms));
+        }
+    }
+    if let (Some(start), Some(end)) = (
+        checkin.and_then(|checkin| parse_iso(checkin.start_time.as_deref())),
+        tasks.and_then(|tasks| parse_iso(tasks.end_time.as_deref())),
+    ) {
+        let ms = (end - start).num_milliseconds();
+        if ms > 0 {
+            return Some(format_duration(ms));
+        }
+    }
+    let checkin_duration =
+        checkin.and_then(|checkin| non_zero_duration(checkin.duration.as_deref()));
+    let tasks_duration = tasks.and_then(|tasks| non_zero_duration(tasks.duration.as_deref()));
+    if let Some(duration) = &checkin_duration {
+        if tasks_duration.is_none() {
+            return Some(duration.clone());
+        }
+    }
+    if let Some(duration) = &tasks_duration {
+        if checkin_duration.is_none() {
+            return Some(duration.clone());
+        }
+    }
+    provided
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
 }
 
 #[cfg(test)]
