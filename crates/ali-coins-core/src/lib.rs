@@ -8,6 +8,7 @@
 
 pub mod config;
 pub mod crypto;
+pub mod lock;
 pub mod secure_fs;
 pub mod session;
 
