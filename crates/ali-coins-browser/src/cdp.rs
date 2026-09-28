@@ -234,6 +234,10 @@ impl Page for CdpPageHandle {
         Ok(())
     }
 
+    async fn enable_resource_blocking(&self, allow_media: bool) -> Result<(), BrowserError> {
+        super::network::enable_resource_blocking(&self.page, allow_media).await
+    }
+
     async fn set_device_profile(&self, profile: &DeviceProfile) -> Result<(), BrowserError> {
         apply_device_profile(&self.page, profile).await
     }

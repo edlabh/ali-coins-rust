@@ -7,9 +7,11 @@
 #![forbid(unsafe_code)]
 
 pub mod cdp;
+pub mod diagnostics;
 pub mod driver;
 pub mod launch;
 pub mod mock;
+pub mod network;
 
 /// Versão do crate, herdada do workspace.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

@@ -23,12 +23,14 @@ async fn abre_pagina_aplica_device_e_avalia() {
         force_no_sandbox: false,
         low_memory: Some(true),
     });
+    let profile_dir = tempfile::tempdir().expect("perfil");
     let options = LaunchOptions {
         headless: true,
         args,
         executable_path: std::env::var("ALI_COINS_CHROME")
             .ok()
             .map(std::path::PathBuf::from),
+        user_data_dir: Some(profile_dir.path().to_path_buf()),
         ..LaunchOptions::default()
     };
     let driver = CdpDriver::new();
@@ -58,4 +60,84 @@ async fn abre_pagina_aplica_device_e_avalia() {
         .await
         .expect("ua");
     assert!(ua.contains("Pixel 7"), "UA inesperado: {ua}");
+}
+
+#[tokio::test]
+#[ignore = "requer Chromium instalado (rode com --ignored)"]
+async fn bloqueia_recursos_e_gera_diagnosticos() {
+    use ali_coins_browser::diagnostics::{
+        DiagnosticsOptions, ScreenshotMode, capture_dom_artifacts, capture_screenshot,
+    };
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    // Servidor local que conta conexões: a imagem NÃO deve chegar nele.
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+    let port = listener.local_addr().unwrap().port();
+    let hits = std::sync::Arc::new(AtomicUsize::new(0));
+    let hits_clone = std::sync::Arc::clone(&hits);
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let _ = stream;
+            hits_clone.fetch_add(1, Ordering::SeqCst);
+        }
+    });
+
+    let env = EnvSource::from_current_process();
+    let args = build_chromium_args(&ChromiumArgsInput {
+        env: &env,
+        is_root: false,
+        dev_shm_small: true,
+        force_no_sandbox: false,
+        low_memory: Some(true),
+    });
+    let profile_dir = tempfile::tempdir().expect("perfil");
+    let options = LaunchOptions {
+        headless: true,
+        args,
+        executable_path: std::env::var("ALI_COINS_CHROME")
+            .ok()
+            .map(std::path::PathBuf::from),
+        user_data_dir: Some(profile_dir.path().to_path_buf()),
+        ..LaunchOptions::default()
+    };
+    let driver = CdpDriver::new();
+    let browser = driver.launch(&options).await.expect("launch");
+    let page = browser.new_page().await.expect("page");
+
+    page.enable_resource_blocking(false)
+        .await
+        .expect("bloqueio");
+
+    page.goto(
+        &format!("data:text/html,<img src='http://127.0.0.1:{port}/x.png'>"),
+        &NavOptions {
+            timeout: Some(Duration::from_secs(20)),
+            wait_until: None,
+        },
+    )
+    .await
+    .expect("goto");
+    tokio::time::sleep(Duration::from_millis(800)).await;
+
+    // Diagnósticos em diretório temporário.
+    let dir = tempfile::tempdir().expect("tempdir");
+    let diag = DiagnosticsOptions {
+        output_dir: dir.path().to_path_buf(),
+        screenshot: ScreenshotMode::On,
+        dump_dom: true,
+    };
+    let screenshot = capture_screenshot(&*page, &diag, "smoke", false)
+        .await
+        .expect("screenshot");
+    assert!(screenshot.is_some());
+    let hash = capture_dom_artifacts(&*page, &diag, "smoke")
+        .await
+        .expect("dom");
+    assert_eq!(hash.len(), 64);
+    assert!(dir.path().join("mobile_body.html").exists());
+    assert_eq!(
+        hits.load(Ordering::SeqCst),
+        0,
+        "imagem deveria ser bloqueada"
+    );
 }

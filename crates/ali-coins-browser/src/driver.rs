@@ -108,6 +108,14 @@ pub trait Page: Send + Sync {
     async fn content(&self) -> Result<String, BrowserError>;
     /// Avalia script devolvendo JSON cru (use [`eval_as`] para tipar).
     async fn eval_raw(&self, script: &str) -> Result<Value, BrowserError>;
+    /// Habilita o bloqueio de recursos (imagem/mídia/fonte/telemetria).
+    async fn enable_resource_blocking(&self, allow_media: bool) -> Result<(), BrowserError> {
+        let _ = allow_media;
+        Err(BrowserError::Unsupported(
+            "enable_resource_blocking não suportado nesta implementação".to_string(),
+        ))
+    }
+
     /// Aplica emulação mobile (device metrics/touch/UA/locale).
     async fn set_device_profile(&self, profile: &DeviceProfile) -> Result<(), BrowserError> {
         let _ = profile;

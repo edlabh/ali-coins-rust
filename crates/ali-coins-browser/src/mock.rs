@@ -234,6 +234,11 @@ impl Page for MockPage {
         Ok(())
     }
 
+    async fn enable_resource_blocking(&self, _allow_media: bool) -> Result<(), BrowserError> {
+        self.ensure_open()?;
+        Ok(())
+    }
+
     async fn set_device_profile(
         &self,
         _profile: &super::launch::DeviceProfile,
