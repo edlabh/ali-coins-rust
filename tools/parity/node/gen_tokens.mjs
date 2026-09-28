@@ -49,14 +49,17 @@ const v3 = security.encryptSession(PLAINTEXT, SECRET, { N: 16384, r: 8, p: 1 });
 // Token v3 gerado com os defaults efetivos da máquina (registra o N usado).
 const defaultN = security.getEffectiveDefaultScryptN();
 const v3default = security.encryptSession(PLAINTEXT, SECRET, {});
-const v3compact = v3default.split(':').slice(0, 5).concat(['base64']).join(':');
+// Compacto: v3 + salt:iv:tag:ciphertext (sem os marcadores N:r:p).
+const parts = v3default.split(':');
+const v3compact = [parts[0], parts[4], parts[5], parts[6], parts[7], 'base64'].join(':');
 
-// Round-trip obrigatório: os três precisam decifrar no próprio oráculo.
+// Round-trip obrigatório: todos precisam decifrar no próprio oráculo.
 for (const [name, token] of [
   ['v1', v1],
   ['v2', v2],
   ['v3', v3],
   ['v3default', v3default],
+  ['v3compact', v3compact],
 ]) {
   const decrypted = security.decryptSession(token, SECRET);
   if (decrypted !== PLAINTEXT) {

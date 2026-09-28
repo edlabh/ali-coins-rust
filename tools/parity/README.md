@@ -9,14 +9,16 @@ com o Node, contrato a contrato (`docs/01-avaliacao.md` §7).
 ```
 tools/parity/
 ├── node/
-│   ├── gen_tokens.mjs    # gera fixtures de cripto (v1/v2/v3 + tokens malformados)
-│   └── normalize.mjs     # normaliza JSON (tempos/durações) para diff justo
-├── fixtures/             # gerado localmente (não versionado por padrão)
+│   ├── gen_tokens.mjs         # gera fixtures de cripto (v1/v2/v3 + tokens malformados)
+│   ├── normalize.mjs          # normaliza JSON (tempos/durações) para diff justo
+│   └── verify_rust_tokens.mjs # decifra tokens gerados pelo Rust com o oráculo
+├── fixtures/                  # gerado localmente (não versionado por padrão)
 │   ├── crypto/
 │   ├── config/
 │   └── reports/
-├── generate-fixtures.sh  # roda os geradores Node
-└── compare-dry-run.sh    # Node × Rust para `--dry-run [--json]`
+├── generate-fixtures.sh       # roda os geradores Node
+├── verify-rust-tokens.sh      # interop Rust -> Node
+└── compare-dry-run.sh         # Node × Rust para `--dry-run [--json]`
 ```
 
 ## Pré-requisitos
