@@ -60,3 +60,17 @@ Próximos passos para alinhar o runner Rust:
 
 - `credentials.env` criado com **0600** e ignorado pelo git (contém `ALI_USER`, `ALI_PASSWORD` e `SESSION_SECRET` gerado).
 - Nenhum segredo foi impresso nos logs da validação.
+
+## Atualização (tarde de 2026-09-28)
+
+- Corrigido no Rust: `wait_for_selector` agora exige **visibilidade** (semântica
+  `state=visible` do Playwright) e o extrator ignora itens invisíveis — a gaveta
+  estava sendo considerada aberta num container escondido (`85732de`).
+- Após essa correção, novas execuções ao vivo passaram a falhar com
+  **`falha de navegação: Request timed out`** no `goto` da página de moedas.
+  Como o oráculo Node já havia concluído as tarefas do dia (+56 moedas) e houve
+  muitas execuções no mesmo IP/sessão, a hipótese principal é **throttling/risco
+  do site**, não uma regressão do port (navegação idêntica funcionava minutos antes).
+- Próxima janela de validação: **outro dia** (ou com tarefas pendentes),
+  repetindo o runner com a correção de visibilidade; se persistir, comparar o
+  DOM ao vivo com o dump do oráculo (`scratch/tasks-drawer.html`).
