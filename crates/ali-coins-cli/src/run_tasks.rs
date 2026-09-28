@@ -5,6 +5,9 @@ use ali_coins_browser::cdp::CdpDriver;
 use ali_coins_browser::driver::{BrowserDriver as _, LaunchOptions};
 use ali_coins_browser::launch::{ChromiumArgsInput, build_chromium_args};
 use ali_coins_core::lock::{LockError, LockOptions, acquire};
+use ali_coins_core::notify::{
+    SafeHttpClient, TelegramConfig, TelegramEvent, build_unified_report_message, send_telegram,
+};
 use ali_coins_core::report::{TasksInput, UnifiedMeta, build_unified_report_payload};
 use ali_coins_core::session::{SessionOptions, load_session_files, save_session, validate_session};
 use ali_coins_core::{exit::ExitCode, logging};
@@ -22,6 +25,15 @@ fn fresh_profile_dir() -> std::path::PathBuf {
 
 fn has_flag(args: &[String], name: &str) -> bool {
     args.iter().any(|arg| arg == name)
+}
+
+/// Rótulo de host exibido nas notificações (`NOTIFY_HOST_LABEL` > hostname).
+fn notify_host(config: &ali_coins_core::config::Config) -> String {
+    if config.notify_host_label.trim().is_empty() {
+        ali_coins_core::lock::hostname()
+    } else {
+        config.notify_host_label.clone()
+    }
 }
 
 /// `ali-coins tasks [--account <id>] [--json] [--force]`
@@ -193,6 +205,53 @@ pub fn run(args: &[String]) -> StdExitCode {
                     &[],
                 );
             }
+            // Notificação rica (best-effort) para execuções avulsas de tarefas.
+            if config.telegram_enabled {
+                let timeout = Duration::from_millis(config.telegram_timeout_ms);
+                if let Ok(client) = SafeHttpClient::new(config.allow_private_webhooks, timeout) {
+                    let host = notify_host(&config);
+                    let chat_id = account
+                        .telegram_chat_id
+                        .clone()
+                        .unwrap_or_else(|| config.telegram_chat_id.clone());
+                    let telegram_config = TelegramConfig {
+                        enabled: true,
+                        bot_token: config.telegram_bot_token.clone(),
+                        chat_id,
+                        silent: config.telegram_silent,
+                        timeout_ms: config.telegram_timeout_ms,
+                        api_base: String::new(),
+                    };
+                    let event = if run.results.is_empty() {
+                        TelegramEvent::AlreadyCollected
+                    } else {
+                        TelegramEvent::Success
+                    };
+                    let message = build_unified_report_message(
+                        &payload,
+                        &host,
+                        env!("CARGO_PKG_VERSION"),
+                        event,
+                    );
+                    match send_telegram(&client, &telegram_config, &message).await {
+                        result if result.ok => {
+                            logging::global().info("Notificação Telegram enviada.", &[]);
+                        }
+                        result => {
+                            logging::global().warn(
+                                &format!(
+                                    "Falha ao enviar Telegram: {}",
+                                    result
+                                        .error
+                                        .unwrap_or_else(|| "erro desconhecido".to_string())
+                                ),
+                                &[],
+                            );
+                        }
+                    }
+                }
+            }
+
             if run.results.is_empty() {
                 logging::global().warn("Nenhuma tarefa encontrada no painel (sem ação).", &[]);
                 Ok(ExitCode::NoAction.as_i32())

@@ -33,9 +33,10 @@ chmod 600 credentials.env
 ali-coins --dry-run --json
 
 # 4. Executar
-ali-coins checkin            # check-in diário
-ali-coins tasks              # painel "Ganhe mais moedas"
-./wrappers/run_all.sh        # check-in + tarefas
+ali-coins all                # check-in + tarefas (notificação única; recomendado)
+ali-coins checkin            # apenas o check-in diário
+ali-coins tasks              # apenas o painel "Ganhe mais moedas"
+./wrappers/run_all.sh        # execução unificada com retentativa (usa `all`)
 ```
 
 ### CLI
@@ -43,8 +44,10 @@ ali-coins tasks              # painel "Ganhe mais moedas"
 | Comando | Descrição |
 |---|---|
 | `ali-coins --dry-run [--json]` | Valida configuração sem navegador |
+| `ali-coins all [--json] [--force] [--account <id>]` | Check-in + tarefas numa execução (relatório e notificação únicos) |
 | `ali-coins checkin [--json] [--force] [--account <id>]` | Check-in diário |
 | `ali-coins tasks [--json] [--force]` | Tarefas diárias |
+| `ali-coins notify-test` | Envia uma mensagem de teste no Telegram |
 | `ali-coins export-session [--all] [--account <id>] [--show-token]` | Exporta sessão cifrada (token v3) |
 | `ali-coins import-session [--all] [--from-file <path>] [--plaintext] [--keep-tokens]` | Importa sessão (stdin/arquivo ≤ 2 MiB) |
 
