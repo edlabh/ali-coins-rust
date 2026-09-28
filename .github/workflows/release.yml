@@ -1,0 +1,52 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: binário + release
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: rustup toolchain install stable --profile minimal
+
+      - name: Cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-release-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build de release
+        run: cargo build --release -p ali-coins-cli
+
+      - name: Empacotar
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          ARCHIVE="ali-coins-rust-${VERSION}-linux-x86_64.tar.gz"
+          tar -C target/release -czf "$ARCHIVE" ali-coins
+          sha256sum "$ARCHIVE" > "$ARCHIVE.sha256"
+
+      - name: Publicar release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          ARCHIVE="ali-coins-rust-${VERSION}-linux-x86_64.tar.gz"
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "$ARCHIVE" "$ARCHIVE.sha256" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "$ARCHIVE" "$ARCHIVE.sha256" \
+              --title "$GITHUB_REF_NAME" --generate-notes
+          fi
