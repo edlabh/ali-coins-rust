@@ -1,0 +1,26 @@
+# Rust
+/target
+
+# Oráculo Node (clone local, nunca versionar)
+/reference
+
+# Segredos e artefatos de execução (contrato C-06/C-19/C-20)
+credentials.env
+accounts.json
+session.json
+session.json.enc
+session_meta.json
+session_meta_*.json
+session_*.json
+session_*.json.enc
+session_token*.txt
+scratch/
+
+# Fixtures com dados gerados localmente (mantidas fora do git salvo decisão)
+# tools/parity/fixtures/**/*.generated.json
+
+# Editores/SO
+.DS_Store
+*.swp
+.idea/
+.vscode/

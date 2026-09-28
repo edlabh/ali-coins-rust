@@ -1,0 +1,119 @@
+{
+  "generator": "tools/parity/node/gen_balance.mjs",
+  "extractStreakFromText": {
+    "Sequência de 42 dias": 42,
+    "Você está há 15 dias de sequência": 15,
+    "You are on a 15-day streak": 15,
+    "212 dias consecutivos": 212,
+    "7 days in a row": 7,
+    "Check-in diário: 7 dias": 7,
+    "7 dias de check-in": 7,
+    "completou 30 dias": 30,
+    "coletou por 3 dias": 3,
+    "sem numero nenhum": null,
+    "": null
+  },
+  "isLoginPromptText": {
+    "Sign in with email code": true,
+    "Switch account": true,
+    "Trocar de conta": true,
+    "Forgot password? Digite sua senha": true,
+    "Esqueci minha senha — password": true,
+    "Minhas moedas 120": false,
+    "": false
+  },
+  "getStreakFromCheckinCoins": [
+    {
+      "coins": "+10 moedas",
+      "result": 1
+    },
+    {
+      "coins": "40",
+      "result": 7
+    },
+    {
+      "coins": "12",
+      "result": null
+    },
+    {
+      "coins": "25",
+      "result": 4
+    },
+    {
+      "coins": "N/D",
+      "result": null
+    }
+  ],
+  "getCheckinCoinsFromStreak": [
+    {
+      "streak": null,
+      "result": 10
+    },
+    {
+      "streak": "N/D",
+      "result": 10
+    },
+    {
+      "streak": 1,
+      "result": 10
+    },
+    {
+      "streak": 2,
+      "result": 15
+    },
+    {
+      "streak": 4,
+      "result": 25
+    },
+    {
+      "streak": 7,
+      "result": 40
+    },
+    {
+      "streak": 212,
+      "result": 40
+    },
+    {
+      "streak": "42 dias",
+      "result": 40
+    }
+  ],
+  "extractTodayLedger": {
+    "21/09/2026 App daily check-in\n+40\nCoin page task\n+5\nMissões de moedas\n+1.000": {
+      "bonusCoins": 40,
+      "missionsCoins": 1005,
+      "bonusCount": 1,
+      "missionsCount": 2
+    },
+    "Bônus diário\n+20": {
+      "bonusCoins": 20,
+      "missionsCoins": 0,
+      "bonusCount": 1,
+      "missionsCount": 0
+    },
+    "Daily bonus\n+15\nWidget coins\n+25": {
+      "bonusCoins": 15,
+      "missionsCoins": 25,
+      "bonusCount": 1,
+      "missionsCount": 1
+    },
+    "Check-in diário no app\n+10": {
+      "bonusCoins": 10,
+      "missionsCoins": 0,
+      "bonusCount": 1,
+      "missionsCount": 0
+    },
+    "Sem lançamentos": {
+      "bonusCoins": null,
+      "missionsCoins": 0,
+      "bonusCount": 0,
+      "missionsCount": 0
+    },
+    "Missões de moedas\n+1,000\nApp daily check-in\n+35": {
+      "bonusCoins": 35,
+      "missionsCoins": 1000,
+      "bonusCount": 1,
+      "missionsCount": 1
+    }
+  }
+}

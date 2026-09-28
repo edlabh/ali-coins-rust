@@ -1,0 +1,615 @@
+{
+  "generator": "tools/parity/node/gen_report.mjs",
+  "isStreakBreak": [
+    {
+      "current": 1,
+      "previous": 10,
+      "already": false,
+      "result": true
+    },
+    {
+      "current": 7,
+      "previous": 212,
+      "already": false,
+      "result": false
+    },
+    {
+      "current": 1,
+      "previous": 10,
+      "already": true,
+      "result": false
+    },
+    {
+      "current": 1,
+      "previous": 1,
+      "already": false,
+      "result": false
+    },
+    {
+      "current": null,
+      "previous": 10,
+      "already": false,
+      "result": false
+    },
+    {
+      "current": 2,
+      "previous": 10,
+      "already": false,
+      "result": false
+    },
+    {
+      "current": 10,
+      "previous": 10,
+      "already": false,
+      "result": false
+    }
+  ],
+  "resolveStreakDays": [
+    {
+      "params": {
+        "detectedStreak": 5,
+        "previousStreakDays": 5,
+        "justCollected": true
+      },
+      "streakDays": 6,
+      "baseStreak": 5
+    },
+    {
+      "params": {
+        "detectedStreak": 5,
+        "previousStreakDays": 5,
+        "alreadyCollected": true
+      },
+      "streakDays": 5,
+      "baseStreak": 5
+    },
+    {
+      "params": {
+        "detectedStreak": null,
+        "previousStreakDays": 5,
+        "justCollected": true
+      },
+      "streakDays": 6,
+      "baseStreak": 5
+    },
+    {
+      "params": {
+        "detectedStreak": 7,
+        "previousStreakDays": 212,
+        "justCollected": true
+      },
+      "streakDays": 213,
+      "baseStreak": 212
+    },
+    {
+      "params": {
+        "detectedStreak": 7,
+        "previousStreakDays": 212,
+        "alreadyCollected": true
+      },
+      "streakDays": 212,
+      "baseStreak": 212
+    },
+    {
+      "params": {
+        "detectedStreak": 1,
+        "previousStreakDays": 50,
+        "statementStreak": 50
+      },
+      "streakDays": 50,
+      "baseStreak": 50
+    },
+    {
+      "params": {
+        "detectedStreak": 60,
+        "previousStreakDays": 50
+      },
+      "streakDays": 60,
+      "baseStreak": 50
+    },
+    {
+      "params": {
+        "detectedStreak": "N/D",
+        "previousStreakDays": 50
+      },
+      "streakDays": 50,
+      "baseStreak": 50
+    },
+    {
+      "params": {
+        "detectedStreak": 3,
+        "justCollected": true
+      },
+      "streakDays": 3,
+      "baseStreak": null
+    },
+    {
+      "params": {
+        "detectedStreak": "7 dias",
+        "previousStreakDays": 7,
+        "confirmedByLedger": true
+      },
+      "streakDays": 8,
+      "baseStreak": 7
+    }
+  ],
+  "computeCheckinCoinsGained": [
+    {
+      "checkin": null,
+      "result": 0
+    },
+    {
+      "checkin": {
+        "alreadyCollected": true,
+        "coinsGainedToday": "40"
+      },
+      "result": 0
+    },
+    {
+      "checkin": {
+        "alreadyCollected": true,
+        "coinsGainedToday": "25",
+        "checkinCoinsFromLedger": true
+      },
+      "result": 25
+    },
+    {
+      "checkin": {
+        "alreadyCollected": false,
+        "coinsGainedToday": "0"
+      },
+      "result": 0
+    },
+    {
+      "checkin": {
+        "alreadyCollected": false,
+        "coinsGainedToday": "20"
+      },
+      "result": 20
+    },
+    {
+      "checkin": {
+        "alreadyCollected": false,
+        "coinsGainedToday": "N/D",
+        "streakDays": 4
+      },
+      "result": 25
+    },
+    {
+      "checkin": {
+        "alreadyCollected": false,
+        "coinsGainedToday": "",
+        "streakDays": "N/D"
+      },
+      "result": 0
+    },
+    {
+      "checkin": {
+        "alreadyCollected": false
+      },
+      "result": 0
+    },
+    {
+      "checkin": {
+        "alreadyCollected": true,
+        "checkinCoinsFromLedger": true,
+        "coinsGainedToday": ""
+      },
+      "result": 0
+    }
+  ],
+  "computeTasksCoinsGained": [
+    {
+      "tasks": null,
+      "checkin": null,
+      "result": 0
+    },
+    {
+      "tasks": {
+        "coinsGained": 30
+      },
+      "checkin": null,
+      "result": 30
+    },
+    {
+      "tasks": {
+        "coinsGained": 30,
+        "coinsFromLedger": true
+      },
+      "checkin": {
+        "alreadyCollected": true,
+        "coinsGainedToday": "20"
+      },
+      "result": 30
+    },
+    {
+      "tasks": {
+        "coinsGained": 30,
+        "initialBalance": 100
+      },
+      "checkin": {
+        "alreadyCollected": false,
+        "coinsGainedToday": "20",
+        "totalBalance": "120"
+      },
+      "result": 10
+    },
+    {
+      "tasks": {
+        "coinsGained": 30,
+        "initialBalance": 120
+      },
+      "checkin": {
+        "alreadyCollected": false,
+        "coinsGainedToday": "20",
+        "totalBalance": "120"
+      },
+      "result": 30
+    },
+    {
+      "tasks": {
+        "coinsGained": 10,
+        "initialBalance": 100
+      },
+      "checkin": {
+        "alreadyCollected": false,
+        "coinsGainedToday": "20",
+        "totalBalance": "120",
+        "balanceBeforeCheckin": true
+      },
+      "result": 0
+    },
+    {
+      "tasks": {
+        "coinsGained": "30"
+      },
+      "checkin": null,
+      "result": 0
+    },
+    {
+      "tasks": {
+        "coinsGained": 5,
+        "initialBalance": "0"
+      },
+      "checkin": {
+        "alreadyCollected": false,
+        "coinsGainedToday": "20",
+        "totalBalance": "20"
+      },
+      "result": 0
+    }
+  ],
+  "computeFinalBalance": [
+    {
+      "checkin": null,
+      "tasks": null,
+      "result": "N/D"
+    },
+    {
+      "checkin": {
+        "totalBalance": "99"
+      },
+      "tasks": null,
+      "result": "99 moedas"
+    },
+    {
+      "checkin": {
+        "totalBalance": "N/D"
+      },
+      "tasks": {
+        "finalCoins": "150"
+      },
+      "result": "150"
+    },
+    {
+      "checkin": {
+        "totalBalance": "99"
+      },
+      "tasks": {
+        "finalCoins": "N/D"
+      },
+      "result": "99 moedas"
+    },
+    {
+      "checkin": null,
+      "tasks": {
+        "finalCoins": "0"
+      },
+      "result": "0"
+    }
+  ],
+  "buildUnifiedReportPayload": [
+    {
+      "checkin": {
+        "alreadyCollected": false,
+        "coinsGainedToday": "25",
+        "streakDays": 4,
+        "previousStreakDays": 3,
+        "totalBalance": "125",
+        "duration": "12s",
+        "userEmail": "u@e.com",
+        "startTime": "2026-09-28T10:00:00.000Z"
+      },
+      "tasks": {
+        "results": [
+          {
+            "title": "Tarefa A",
+            "status": "Concluída (3/3)"
+          }
+        ],
+        "initialBalance": 100,
+        "finalBalance": 140,
+        "coinsGained": 40,
+        "finalCoins": "140",
+        "duration": "30s",
+        "endTime": "2026-09-28T10:00:50.000Z"
+      },
+      "meta": {
+        "mainStartTime": "2026-09-28T10:00:00.000Z",
+        "mainEndTime": "2026-09-28T10:00:50.000Z"
+      },
+      "payload": {
+        "type": "unified_report",
+        "user": "u@e.com",
+        "checkin": {
+          "alreadyCollected": false,
+          "coinsGainedToday": "25",
+          "streakDays": 4,
+          "previousStreakDays": 3,
+          "totalBalance": "125",
+          "duration": "12s"
+        },
+        "tasks": {
+          "results": [
+            {
+              "title": "Tarefa A",
+              "status": "Concluída (3/3)"
+            }
+          ],
+          "initialBalance": 100,
+          "finalBalance": 140,
+          "coinsGained": 40,
+          "finalCoins": "140",
+          "duration": "30s"
+        },
+        "meta": {
+          "startTime": "2026-09-28T10:00:00.000Z",
+          "endTime": "2026-09-28T10:00:50.000Z",
+          "totalDuration": "50s",
+          "step1Duration": "12s",
+          "step2Duration": "30s",
+          "finalBalance": "140",
+          "totalCoinsGained": 40,
+          "checkinCoinsGained": 25,
+          "tasksCoinsGained": 15
+        }
+      }
+    },
+    {
+      "checkin": null,
+      "tasks": null,
+      "meta": {},
+      "payload": {
+        "type": "unified_report",
+        "checkin": null,
+        "tasks": null,
+        "meta": {
+          "totalDuration": "0s",
+          "finalBalance": "N/D",
+          "totalCoinsGained": 0,
+          "checkinCoinsGained": 0,
+          "tasksCoinsGained": 0
+        }
+      }
+    },
+    {
+      "checkin": {
+        "alreadyCollected": true,
+        "coinsGainedToday": "40",
+        "streakDays": 212,
+        "previousStreakDays": 212,
+        "totalBalance": "900",
+        "duration": "0s"
+      },
+      "tasks": null,
+      "meta": {
+        "user": "fulano@example.com",
+        "totalDuration": "5s",
+        "tasksError": "boom"
+      },
+      "payload": {
+        "type": "unified_report",
+        "user": "fulano@example.com",
+        "checkin": {
+          "alreadyCollected": true,
+          "coinsGainedToday": "40",
+          "streakDays": 212,
+          "previousStreakDays": 212,
+          "totalBalance": "900",
+          "duration": "0s"
+        },
+        "tasks": null,
+        "meta": {
+          "totalDuration": "5s",
+          "finalBalance": "900 moedas",
+          "totalCoinsGained": 0,
+          "checkinCoinsGained": 0,
+          "tasksCoinsGained": 0,
+          "tasksError": "boom"
+        }
+      }
+    }
+  ],
+  "buildMultiAccountReportPayload": [
+    {
+      "accountResults": [
+        {
+          "account": {
+            "maskedUser": "fu***@example.com"
+          },
+          "checkinResult": {
+            "alreadyCollected": false,
+            "coinsGainedToday": "10",
+            "streakDays": 1,
+            "totalBalance": "100",
+            "duration": "10s"
+          },
+          "tasksResult": {
+            "results": [],
+            "initialBalance": 100,
+            "finalBalance": 130,
+            "coinsGained": 30,
+            "finalCoins": "130",
+            "duration": "20s"
+          },
+          "startTime": "2026-09-28T10:00:00.000Z",
+          "endTime": "2026-09-28T10:00:30.000Z",
+          "nextAccountAt": "2026-09-28T10:05:00.000Z",
+          "nextAccountUser": "outro@example.com"
+        },
+        {
+          "user": "segunda@example.com",
+          "checkinResult": null,
+          "tasksResult": null,
+          "error": "falha de login",
+          "isImportedSessionExpired": true
+        }
+      ],
+      "payload": {
+        "type": "multi_account_report",
+        "accounts": [
+          {
+            "user": "fu***@example.com",
+            "checkin": {
+              "alreadyCollected": false,
+              "coinsGainedToday": "10",
+              "streakDays": 1,
+              "totalBalance": "100",
+              "duration": "10s"
+            },
+            "tasks": {
+              "results": [],
+              "initialBalance": 100,
+              "finalBalance": 130,
+              "coinsGained": 30,
+              "finalCoins": "130",
+              "duration": "20s"
+            },
+            "isImportedSessionExpired": false,
+            "startTime": "2026-09-28T10:00:00.000Z",
+            "endTime": "2026-09-28T10:00:30.000Z",
+            "nextAccountAt": "2026-09-28T10:05:00.000Z",
+            "nextAccountUser": "outro@example.com",
+            "duration": "30s",
+            "meta": {
+              "finalBalance": "130",
+              "totalCoinsGained": 40,
+              "checkinCoinsGained": 10,
+              "tasksCoinsGained": 30
+            }
+          },
+          {
+            "user": "segunda@example.com",
+            "checkin": null,
+            "tasks": null,
+            "error": "falha de login",
+            "isImportedSessionExpired": true,
+            "meta": {
+              "finalBalance": "N/D",
+              "totalCoinsGained": 0,
+              "checkinCoinsGained": 0,
+              "tasksCoinsGained": 0
+            }
+          }
+        ],
+        "meta": {
+          "totalAccounts": 2,
+          "successfulAccounts": 1
+        }
+      }
+    },
+    {
+      "accountResults": [],
+      "payload": {
+        "type": "multi_account_report",
+        "accounts": [],
+        "meta": {
+          "totalAccounts": 0,
+          "successfulAccounts": 0
+        }
+      }
+    }
+  ],
+  "sanitizeWebhookPayload": [
+    {
+      "value": {
+        "user": "fulano@example.com",
+        "sessionData": {
+          "a": 1
+        },
+        "cookies": [
+          1
+        ],
+        "text": "ok"
+      },
+      "result": {
+        "user": "fu***@example.com",
+        "text": "ok"
+      }
+    },
+    {
+      "value": {
+        "nested": {
+          "userEmail": "beltrano@example.com",
+          "arr": [
+            "telefone",
+            "5511999999999"
+          ]
+        }
+      },
+      "result": {
+        "nested": {
+          "userEmail": "be***@example.com",
+          "arr": [
+            "telefone",
+            "5511999999999"
+          ]
+        }
+      }
+    },
+    {
+      "value": {
+        "deep": {
+          "a": {
+            "b": {
+              "c": {
+                "d": {
+                  "e": {
+                    "f": {
+                      "g": 1
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "result": {
+        "deep": {
+          "a": {
+            "b": {
+              "c": {
+                "d": {
+                  "e": {
+                    "f": "[profundidade máxima excedida]"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

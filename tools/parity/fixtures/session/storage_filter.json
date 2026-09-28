@@ -1,0 +1,124 @@
+{
+  "generator": "tools/parity/node/gen_storage_filter.mjs",
+  "allowed": {
+    "userInfo": true,
+    "AUTH_TOKEN": true,
+    "_m_h5_tk": true,
+    "currency": true,
+    "locale": true,
+    "lang": true,
+    "accountId": true,
+    "session_id": true,
+    "loginData": true,
+    "APLUS_S_CORE": false,
+    "aegis": false,
+    "goldlog": false,
+    "": false,
+    "Batman": false
+  },
+  "shouldFilterStorageEnv": {
+    "0": false,
+    "__unset__": true,
+    "": true,
+    "false": false,
+    "off": false,
+    "no": false,
+    "true": true,
+    "yes": true
+  },
+  "shouldFilterStorageOptions": {
+    "true": true,
+    "false": false
+  },
+  "input": {
+    "cookies": [
+      {
+        "name": "xman_us_t",
+        "value": "auth-value",
+        "domain": ".aliexpress.com"
+      },
+      {
+        "name": "login_aliyunid_ticket",
+        "value": "ticket"
+      }
+    ],
+    "origins": [
+      {
+        "origin": "https://www.aliexpress.com",
+        "localStorage": [
+          {
+            "name": "userInfo",
+            "value": "1"
+          },
+          {
+            "name": "aegis",
+            "value": "ruido"
+          },
+          {
+            "name": "AUTH_TOKEN",
+            "value": "t"
+          },
+          {
+            "name": "APLUS_S_CORE",
+            "value": "cache"
+          }
+        ]
+      },
+      {
+        "origin": "https://m.aliexpress.com",
+        "localStorage": "invalido"
+      },
+      "origem-invalida"
+    ]
+  },
+  "filtered": {
+    "cookies": [
+      {
+        "name": "xman_us_t",
+        "value": "auth-value",
+        "domain": ".aliexpress.com"
+      },
+      {
+        "name": "login_aliyunid_ticket",
+        "value": "ticket"
+      }
+    ],
+    "origins": [
+      {
+        "origin": "https://www.aliexpress.com",
+        "localStorage": [
+          {
+            "name": "userInfo",
+            "value": "1"
+          },
+          {
+            "name": "AUTH_TOKEN",
+            "value": "t"
+          }
+        ]
+      },
+      {
+        "origin": "https://m.aliexpress.com",
+        "localStorage": []
+      },
+      {
+        "0": "o",
+        "1": "r",
+        "2": "i",
+        "3": "g",
+        "4": "e",
+        "5": "m",
+        "6": "-",
+        "7": "i",
+        "8": "n",
+        "9": "v",
+        "10": "a",
+        "11": "l",
+        "12": "i",
+        "13": "d",
+        "14": "a",
+        "localStorage": []
+      }
+    ]
+  }
+}

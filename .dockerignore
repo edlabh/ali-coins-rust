@@ -1,0 +1,28 @@
+# Artefatos de build
+target/
+
+# Oráculo Node e ferramentas de paridade (não vão para a imagem)
+reference/
+tools/
+docs/
+.github/
+
+# Segredos e sessões (contrato C-06/C-20)
+credentials.env
+accounts.json
+session.json
+session.json.enc
+session_meta.json
+session_meta_*.json
+session_*.json
+session_*.json.enc
+session_token*.txt
+scratch/
+
+# Git e editores
+.git/
+.gitignore
+.vscode/
+.idea/
+*.md
+!README.md

@@ -1,0 +1,38 @@
+[workspace]
+resolver = "3"
+members = [
+  "crates/ali-coins-core",
+  "crates/ali-coins-browser",
+  "crates/ali-coins-flows",
+  "crates/ali-coins-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "ISC"
+
+[workspace.dependencies]
+# Dependências externas são adicionadas nas fases 1+ conforme ADR-0002:
+# tokio, clap, serde, serde_json, aes-gcm, scrypt, sha2, base64, rand,
+# chrono, chrono-tz, reqwest, tracing, tracing-subscriber, thiserror,
+# anyhow, uuid, dotenvy, nix, windows-sys, chromiumoxide (ADR-0001).
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+unused_must_use = "deny"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+module_name_repetitions = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+too_many_lines = "allow"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
+panic = "unwind"
