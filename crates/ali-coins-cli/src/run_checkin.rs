@@ -298,6 +298,38 @@ pub fn run(args: &[String]) -> StdExitCode {
         })
         .map_or_else(
             |error: String| {
+                // Notifica a falha (best-effort) antes de sair.
+                if config.telegram_enabled {
+                    let timeout = Duration::from_millis(config.telegram_timeout_ms);
+                    let host = ali_coins_core::lock::hostname();
+                    let chat_id = account
+                        .telegram_chat_id
+                        .clone()
+                        .unwrap_or_else(|| config.telegram_chat_id.clone());
+                    let telegram_config = TelegramConfig {
+                        enabled: true,
+                        bot_token: config.telegram_bot_token.clone(),
+                        chat_id,
+                        silent: config.telegram_silent,
+                        timeout_ms: config.telegram_timeout_ms,
+                        api_base: String::new(),
+                    };
+                    let context = TelegramContext {
+                        user: Some(account.masked_user.as_str()),
+                        error: Some(error.as_str()),
+                        host: Some(host.as_str()),
+                        version: Some(env!("CARGO_PKG_VERSION")),
+                        ..TelegramContext::default()
+                    };
+                    let message = build_message(TelegramEvent::Failure, &context);
+                    runtime.block_on(async {
+                        if let Ok(client) =
+                            SafeHttpClient::new(config.allow_private_webhooks, timeout)
+                        {
+                            let _ = send_telegram(&client, &telegram_config, &message).await;
+                        }
+                    });
+                }
                 if error.contains("2FA") || error.contains("não-interativa") {
                     logging::global().error(&error, &[]);
                     StdExitCode::from(u8::try_from(ExitCode::TwoFactor.as_i32()).unwrap_or(1))

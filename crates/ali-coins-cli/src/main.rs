@@ -6,6 +6,7 @@
 #![forbid(unsafe_code)]
 
 mod export_import;
+mod notify_test;
 mod run_checkin;
 mod run_tasks;
 
@@ -71,6 +72,7 @@ fn main() -> ExitCode {
         Some("export-session") => return export_import::run_export(&raw[2..]),
         Some("import-session") => return export_import::run_import(&raw[2..]),
         Some("checkin") => return run_checkin::run(&raw[2..]),
+        Some("notify-test") => return notify_test::run(&raw[2..]),
         Some("tasks") => return run_tasks::run(&raw[2..]),
         _ => {}
     }
