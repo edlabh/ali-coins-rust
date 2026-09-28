@@ -11,6 +11,7 @@ pub mod crypto;
 pub mod exit;
 pub mod lock;
 pub mod logging;
+pub mod notify;
 pub mod report;
 pub mod secure_fs;
 pub mod session;

@@ -28,7 +28,7 @@ Depende de: `docs/01-avaliacao.md`, `docs/02-arquitetura.md`, `docs/adr/` (ADR-0
 
 Escopo: `core::config`, `crypto`, `session`, `lock`, `logging`, `time`, `report`, `notify`, `exit`; subcomando `--dry-run` funcional; `export-session`/`import-session` completos.
 
-**Status: em andamento (2026-09-28).** Concluído: `crypto`, `secure_fs`, `config`/env + `--dry-run`, `session`, `lock`, `logging`/`exit`, `time`, `url_guard` (SSRF) e `report` (tipos + streak + contabilidade). Pendentes: builders/render do `report`, `notify` (Telegram/heartbeat/webhook + `safe_fetch`) e `export-session`/`import-session`.
+**Status: em andamento (2026-09-28).** Concluído: `crypto`, `secure_fs`, `config`/env + `--dry-run`, `session`, `lock`, `logging`/`exit`, `time`, `url_guard`, `report` (puro) e `notify::http`/`heartbeat` (safe_fetch com SSRF por hop + pinning). Pendentes: Telegram/webhooks, builders/render do `report` e `export-session`/`import-session`.
 
 **Entregáveis**
 - Parser de env com tabela declarativa + mensagens PT-BR; `credentials.env`/`accounts.json`; paths/hash por conta.
