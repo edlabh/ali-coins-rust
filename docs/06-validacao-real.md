@@ -74,3 +74,27 @@ Próximos passos para alinhar o runner Rust:
 - Próxima janela de validação: **outro dia** (ou com tarefas pendentes),
   repetindo o runner com a correção de visibilidade; se persistir, comparar o
   DOM ao vivo com o dump do oráculo (`scratch/tasks-drawer.html`).
+
+## Execução unificada na VM em Docker — `all` (noite de 2026-09-28)
+
+Primeira execução completa do comando **`all`** (check-in + tarefas num processo,
+relatório e notificação únicos) na VM, em modo Docker:
+
+- `./run_all.sh --json` → **exit 0**; etapas `1m 06s` (check-in) e `1m 47s`
+  (tarefas) com duração total `2m 56s` no payload.
+- Relatório: `checkin.alreadyCollected=true`, `streakDays=1`;
+  `meta.tasksCoinsGained=0`, `meta.finalBalance="N/D"`.
+- **Uma única notificação Telegram** enviada, no formato do oráculo
+  (`ℹ️ ali-coins — DD/MM/AAAA`, conta mascarada, host `vm-ali-rust (v0.1.0)`,
+  ganhos, sequência, saldo e duração) — commit `470e1c3`.
+- Correções que a validação exigiu nesta janela: args do chromiumoxide sem
+  `--` duplicado (`a82e77e`), `goto` sem depender da resposta do
+  `Page.navigate` (`89f10df`) e mensagem unificada no core (`fdb0546`).
+
+Pendências confirmadas em produção:
+
+1. `meta.finalBalance` continua `N/D` — o parser de saldo do check-in (D-08) não
+   encontra o texto na página mobile atual; sem saldo não há diferença para
+   medir o ganho das tarefas (`tasksCoinsGained=0`).
+2. Os status de tarefas (`Concluída (n/2)` / `Falhou (limite de 4 tentativas)`)
+   são registrados no relatório normalmente.
