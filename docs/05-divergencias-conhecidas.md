@@ -23,6 +23,7 @@ Contratos classificados como **rígidos** (devem ser idênticos) ou **flexíveis
 | D-06 | `close_modals` usa heurística de rótulos/classes; o oráculo tem lista exata de seletores com `:has-text`. | `libs/ui/navigation.js:59-164` | Alinhar seletores no incremento de paridade com o site real (check-in). |
 | D-07 | `login` cobre preenchimento/submissão/2FA fail-fast/validação de cookies, mas o **slider humanizado** (`trySolveSlider`) e os seletores `:has-text` completos ainda não foram portados. | `libs/ui/login.js`, `libs/selectors.js:8-29` | Portar slider (easing/jitter/frames) na paridade com o site real. |
 | D-08 | `checkin` não inclui a **pré-checagem desktop** (saldo/streak/ledger), a coleta de água e o parser completo do extrato; o saldo é lido por regex simplificada. | `collect.js:196-895` | Completar na paridade com o site real, reutilizando `core::report` para contabilidade. |
+| D-09 | `tasks` porta status/prioridade/dispatcher, mas as **listas de palavras-chave** de app-only e detalhes de classificação serão alinhados 1:1 com `libs/tasks/state.js`. | `libs/tasks/state.js:10-25,271-332` | Alinhar keywords e snapshots de status na paridade com o site real. |
 
 ## Rígidos (cobertos por teste de paridade)
 
