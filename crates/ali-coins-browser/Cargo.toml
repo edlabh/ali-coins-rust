@@ -1,0 +1,13 @@
+[package]
+name = "ali-coins-browser"
+description = "Camada de browser do ali-coins-rust: trait BrowserDriver + implementação CDP."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+ali-coins-core = { path = "../ali-coins-core" }

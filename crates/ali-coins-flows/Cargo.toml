@@ -1,0 +1,14 @@
+[package]
+name = "ali-coins-flows"
+description = "Fluxos de negócio do ali-coins-rust: check-in e tarefas do AliExpress."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+ali-coins-core = { path = "../ali-coins-core" }
+ali-coins-browser = { path = "../ali-coins-browser" }

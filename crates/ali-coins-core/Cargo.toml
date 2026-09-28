@@ -1,0 +1,12 @@
+[package]
+name = "ali-coins-core"
+description = "Núcleo sem browser do ali-coins-rust (config, cripto, sessão, lock, relatórios)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
