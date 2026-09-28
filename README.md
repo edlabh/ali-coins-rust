@@ -84,6 +84,15 @@ ALI_COINS_CHROME=/caminho/chrome ./tools/smoke/run-cdp.sh
 
 ## Documentação
 
+### Manuais
+
+- `docs/manual/INSTALL_LINUX.md` — instalação no Linux (Rust, Chromium, primeiros passos)
+- `docs/manual/CLOUD_SESSIONS.md` — VPS, cron, export/import de sessão, Docker e low-memory
+- `docs/manual/TELEGRAM.md` — bot, configuração e testes de notificação
+- `docs/manual/RELEASING.md` — versionamento, tags e artefatos
+
+### Técnica
+
 - `docs/01-avaliacao.md` — avaliação do projeto Node
 - `docs/02-arquitetura.md` — arquitetura do port
 - `docs/03-roadmap.md` — fases e critérios de aceite
