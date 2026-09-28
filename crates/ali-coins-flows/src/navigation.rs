@@ -29,6 +29,17 @@ pub async fn goto_with_retry_options(
     attempts: u32,
     base_delay_ms: u64,
 ) -> Result<(), BrowserError> {
+    goto_with_retry_timeout(page, url, attempts, base_delay_ms, NAV_TIMEOUT).await
+}
+
+/// Navega com retry e timeout explícito (valores dinâmicos do credentials.env).
+pub async fn goto_with_retry_timeout(
+    page: &dyn Page,
+    url: &str,
+    attempts: u32,
+    base_delay_ms: u64,
+    timeout: Duration,
+) -> Result<(), BrowserError> {
     let attempts = attempts.max(1);
     let mut last_error: Option<BrowserError> = None;
     for attempt in 0..attempts {
@@ -36,7 +47,7 @@ pub async fn goto_with_retry_options(
             .goto(
                 url,
                 &NavOptions {
-                    timeout: Some(NAV_TIMEOUT),
+                    timeout: Some(timeout),
                     wait_until: None,
                 },
             )

@@ -7,7 +7,6 @@
 //!
 //! Guards: `max_actions`, `max_attempts` por título, `skip_app_only`.
 
-use crate::navigation::goto_with_retry;
 use crate::tasks::{Rounds, TaskKind, classify_task_kind, classify_task_status, priority};
 use ali_coins_browser::driver::{BrowserError, Page};
 use serde_json::Value;
@@ -97,6 +96,8 @@ pub struct TasksOptions {
     pub skip_app_only: bool,
     /// Query fixa da tarefa de busca.
     pub search_query: String,
+    /// Timeout de navegação (`NAV_TIMEOUT`).
+    pub nav_timeout: Duration,
 }
 
 impl Default for TasksOptions {
@@ -107,6 +108,7 @@ impl Default for TasksOptions {
             scroll_wait: Duration::from_secs(10),
             skip_app_only: true,
             search_query: crate::tasks::SEARCH_QUERY.to_string(),
+            nav_timeout: crate::navigation::NAV_TIMEOUT,
         }
     }
 }
@@ -314,7 +316,9 @@ pub async fn wait_for_tasks_with_reload(page: &dyn Page, timeout: Duration) -> V
             ),
             &[],
         );
-        let _ = goto_with_retry(page, DESKTOP_COIN_URL).await;
+        let _ =
+            crate::navigation::goto_with_retry_timeout(page, DESKTOP_COIN_URL, 3, 2_000, timeout)
+                .await;
         let _ = open_drawer(page, timeout.min(Duration::from_secs(10))).await;
     }
     Vec::new()
@@ -322,7 +326,14 @@ pub async fn wait_for_tasks_with_reload(page: &dyn Page, timeout: Duration) -> V
 
 /// Executa as tarefas de forma conservadora (claims, busca e navegação).
 pub async fn run_tasks(page: &dyn Page, options: &TasksOptions) -> Result<TasksRun, TasksError> {
-    goto_with_retry(page, DESKTOP_COIN_URL).await?;
+    crate::navigation::goto_with_retry_timeout(
+        page,
+        DESKTOP_COIN_URL,
+        3,
+        2_000,
+        options.nav_timeout,
+    )
+    .await?;
     if !open_drawer(page, Duration::from_secs(10)).await? {
         return Err(TasksError::DrawerMissing);
     }
@@ -439,7 +450,14 @@ pub async fn run_tasks(page: &dyn Page, options: &TasksOptions) -> Result<TasksR
                     let _ = page.scroll_by(0, 1200).await;
                     tokio::time::sleep(Duration::from_secs(2)).await;
                 }
-                let _ = goto_with_retry(page, DESKTOP_COIN_URL).await;
+                let _ = crate::navigation::goto_with_retry_timeout(
+                    page,
+                    DESKTOP_COIN_URL,
+                    3,
+                    2_000,
+                    options.nav_timeout,
+                )
+                .await;
                 let _ = open_drawer(page, Duration::from_secs(10)).await;
             }
             continue;
@@ -450,9 +468,23 @@ pub async fn run_tasks(page: &dyn Page, options: &TasksOptions) -> Result<TasksR
             TaskKind::Search => {
                 let slug = options.search_query.replace(' ', "-");
                 let url = format!("https://www.aliexpress.com/w/wholesale-{slug}.html");
-                let _ = goto_with_retry(page, &url).await;
+                let _ = crate::navigation::goto_with_retry_timeout(
+                    page,
+                    &url,
+                    3,
+                    2_000,
+                    options.nav_timeout,
+                )
+                .await;
                 actions += 1;
-                let _ = goto_with_retry(page, DESKTOP_COIN_URL).await;
+                let _ = crate::navigation::goto_with_retry_timeout(
+                    page,
+                    DESKTOP_COIN_URL,
+                    3,
+                    2_000,
+                    options.nav_timeout,
+                )
+                .await;
                 let _ = open_drawer(page, Duration::from_secs(10)).await;
             }
             TaskKind::Navigation => {

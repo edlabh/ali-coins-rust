@@ -9,6 +9,9 @@ use ali_coins_browser::cdp::CdpDriver;
 use ali_coins_browser::driver::{BrowserDriver as _, LaunchOptions};
 use ali_coins_browser::launch::{ChromiumArgsInput, build_chromium_args, pixel7_profile};
 use ali_coins_core::lock::{LockError, LockOptions, acquire};
+use ali_coins_core::notify::{
+    SafeHttpClient, TelegramConfig, TelegramContext, TelegramEvent, build_message, send_telegram,
+};
 use ali_coins_core::report::{
     CheckinInput, StreakValue, UnifiedMeta, build_unified_report_payload, checkin_coins_from_streak,
 };
@@ -150,13 +153,18 @@ pub fn run(args: &[String]) -> StdExitCode {
                 let _ = page.seed_storage_state(state).await;
             }
 
+            let element_timeout = Duration::from_millis(config.element_timeout);
+            let selector_timeout = Duration::from_millis(config.selector_timeout);
             let checkin_options = CheckinOptions {
                 login: LoginOptions {
                     interactive: std::io::stdin().is_terminal(),
+                    detect_timeout: element_timeout,
+                    password_wait_timeout: selector_timeout,
                     ..LoginOptions::default()
                 },
-                confirm_timeout: Duration::from_secs(5),
-                detect_timeout: Duration::from_millis(800),
+                confirm_timeout: Duration::from_secs(config.scroll_wait_seconds.max(3)),
+                detect_timeout: element_timeout,
+                nav_timeout: Duration::from_millis(config.nav_timeout),
             };
             let result = run_checkin(&*page, &account.user, &account.password, &checkin_options)
                 .await
@@ -220,6 +228,64 @@ pub fn run(args: &[String]) -> StdExitCode {
                     ),
                     &[],
                 );
+            }
+
+            // Notificação Telegram (best-effort; nunca falha o fluxo).
+            if config.telegram_enabled {
+                let timeout = Duration::from_millis(config.telegram_timeout_ms);
+                if let Ok(client) = SafeHttpClient::new(config.allow_private_webhooks, timeout) {
+                    let event = if result.already_collected {
+                        TelegramEvent::AlreadyCollected
+                    } else if result.collected {
+                        TelegramEvent::Success
+                    } else {
+                        TelegramEvent::Failure
+                    };
+                    let streak_display = result
+                        .streak_days
+                        .map_or_else(|| "N/D".to_string(), |value| value.to_string());
+                    let host = ali_coins_core::lock::hostname();
+                    let chat_id = account
+                        .telegram_chat_id
+                        .clone()
+                        .unwrap_or_else(|| config.telegram_chat_id.clone());
+                    let context = TelegramContext {
+                        user: Some(account.masked_user.as_str()),
+                        total_balance: result.total_balance.as_deref(),
+                        coins_gained: coins,
+                        streak_days: Some(streak_display.as_str()),
+                        previous_streak_days: None,
+                        duration: None,
+                        error: None,
+                        host: Some(host.as_str()),
+                        version: Some(env!("CARGO_PKG_VERSION")),
+                    };
+                    let telegram_config = TelegramConfig {
+                        enabled: true,
+                        bot_token: config.telegram_bot_token.clone(),
+                        chat_id,
+                        silent: config.telegram_silent,
+                        timeout_ms: config.telegram_timeout_ms,
+                        api_base: String::new(),
+                    };
+                    let message = build_message(event, &context);
+                    match send_telegram(&client, &telegram_config, &message).await {
+                        result if result.ok => {
+                            logging::global().info("Notificação Telegram enviada.", &[]);
+                        }
+                        result => {
+                            logging::global().warn(
+                                &format!(
+                                    "Falha ao enviar Telegram: {}",
+                                    result
+                                        .error
+                                        .unwrap_or_else(|| "erro desconhecido".to_string())
+                                ),
+                                &[],
+                            );
+                        }
+                    }
+                }
             }
 
             if result.already_collected {

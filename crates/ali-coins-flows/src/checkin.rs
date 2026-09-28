@@ -6,7 +6,6 @@
 
 use crate::balance::extract_streak_from_text;
 use crate::login::{LoginError, LoginOptions, has_auth_cookies, run_login};
-use crate::navigation::goto_with_retry;
 use ali_coins_browser::driver::{BrowserError, Page};
 use std::time::Duration;
 use thiserror::Error;
@@ -73,6 +72,8 @@ pub struct CheckinOptions {
     pub confirm_timeout: Duration,
     /// Timeout curto de detecção.
     pub detect_timeout: Duration,
+    /// Timeout de navegação (`NAV_TIMEOUT`).
+    pub nav_timeout: Duration,
 }
 
 impl Default for CheckinOptions {
@@ -81,6 +82,7 @@ impl Default for CheckinOptions {
             login: LoginOptions::default(),
             confirm_timeout: Duration::from_secs(3),
             detect_timeout: Duration::from_millis(500),
+            nav_timeout: crate::navigation::NAV_TIMEOUT,
         }
     }
 }
@@ -134,7 +136,14 @@ pub async fn run_checkin(
     password: &str,
     options: &CheckinOptions,
 ) -> Result<CheckinResult, CheckinError> {
-    goto_with_retry(page, &mobile_coin_url()).await?;
+    crate::navigation::goto_with_retry_timeout(
+        page,
+        &mobile_coin_url(),
+        3,
+        2_000,
+        options.nav_timeout,
+    )
+    .await?;
     log_info(&format!(
         "Página do check-in carregada: {}",
         page.url().await.unwrap_or_default()
@@ -232,6 +241,7 @@ mod tests {
             },
             confirm_timeout: Duration::from_millis(20),
             detect_timeout: Duration::from_millis(5),
+            nav_timeout: Duration::from_secs(5),
         }
     }
 

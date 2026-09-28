@@ -143,6 +143,7 @@ pub fn run(args: &[String]) -> StdExitCode {
                 scroll_wait: Duration::from_secs(config.scroll_wait_seconds),
                 skip_app_only: config.skip_app_only_tasks,
                 search_query: ali_coins_flows::tasks::SEARCH_QUERY.to_string(),
+                nav_timeout: Duration::from_millis(config.nav_timeout),
             };
             let run = run_tasks(&*page, &options)
                 .await
