@@ -32,6 +32,9 @@ pub enum HttpError {
     /// Falha de rede/HTTP.
     #[error("{0}")]
     Request(String),
+    /// Timeout ambíguo (nunca retentado em notificações).
+    #[error("timeout: {0}")]
+    Timeout(String),
     /// URL inicial malformada.
     #[error("URL malformada: {0}")]
     InvalidUrl(String),
@@ -42,6 +45,12 @@ impl HttpError {
     #[must_use]
     pub fn is_ssrf_blocked(&self) -> bool {
         matches!(self, Self::SsrfBlocked(_))
+    }
+
+    /// É um timeout ambíguo?
+    #[must_use]
+    pub fn is_timeout(&self) -> bool {
+        matches!(self, Self::Timeout(_))
     }
 }
 
@@ -247,6 +256,9 @@ impl SafeHttpClient {
 
 #[allow(clippy::needless_pass_by_value)]
 fn map_reqwest_error(err: reqwest::Error) -> HttpError {
+    if err.is_timeout() {
+        return HttpError::Timeout(err.to_string());
+    }
     let mut source: Option<&(dyn std::error::Error + 'static)> = Some(&err);
     while let Some(current) = source {
         if current.to_string().contains(SSRF_MARKER) {
