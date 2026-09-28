@@ -6,6 +6,7 @@
 #![forbid(unsafe_code)]
 
 pub mod balance;
+pub mod checkin;
 pub mod login;
 pub mod navigation;
 
