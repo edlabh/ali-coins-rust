@@ -244,7 +244,7 @@ pub fn run(args: &[String]) -> StdExitCode {
                     let streak_display = result
                         .streak_days
                         .map_or_else(|| "N/D".to_string(), |value| value.to_string());
-                    let host = ali_coins_core::lock::hostname();
+                    let host = notify_host(&config);
                     let chat_id = account
                         .telegram_chat_id
                         .clone()
@@ -301,7 +301,7 @@ pub fn run(args: &[String]) -> StdExitCode {
                 // Notifica a falha (best-effort) antes de sair.
                 if config.telegram_enabled {
                     let timeout = Duration::from_millis(config.telegram_timeout_ms);
-                    let host = ali_coins_core::lock::hostname();
+                    let host = notify_host(&config);
                     let chat_id = account
                         .telegram_chat_id
                         .clone()
@@ -340,4 +340,13 @@ pub fn run(args: &[String]) -> StdExitCode {
             },
             |code| StdExitCode::from(u8::try_from(code).unwrap_or(1)),
         )
+}
+
+/// Rótulo de host exibido nas notificações (`NOTIFY_HOST_LABEL` > hostname).
+fn notify_host(config: &ali_coins_core::config::Config) -> String {
+    if config.notify_host_label.trim().is_empty() {
+        ali_coins_core::lock::hostname()
+    } else {
+        config.notify_host_label.clone()
+    }
 }

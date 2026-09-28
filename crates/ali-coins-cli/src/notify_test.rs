@@ -45,7 +45,7 @@ pub fn run(_args: &[String]) -> StdExitCode {
                 timeout_ms: config.telegram_timeout_ms,
                 api_base: String::new(),
             };
-            let host = ali_coins_core::lock::hostname();
+            let host = notify_host(&config);
             let context = TelegramContext {
                 user: Some(account.masked_user.as_str()),
                 host: Some(host.as_str()),
@@ -70,4 +70,13 @@ pub fn run(_args: &[String]) -> StdExitCode {
             },
             |()| StdExitCode::from(u8::try_from(ExitCode::Success.as_i32()).unwrap_or(0)),
         )
+}
+
+/// Rótulo de host exibido nas notificações (`NOTIFY_HOST_LABEL` > hostname).
+fn notify_host(config: &ali_coins_core::config::Config) -> String {
+    if config.notify_host_label.trim().is_empty() {
+        ali_coins_core::lock::hostname()
+    } else {
+        config.notify_host_label.clone()
+    }
 }
