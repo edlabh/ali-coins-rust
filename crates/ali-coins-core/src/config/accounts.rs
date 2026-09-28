@@ -7,7 +7,7 @@ use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 
 /// Conta configurada, com paths isolados (igual ao `loadAccounts` do oráculo).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Account {
     /// Índice 1-based exibido no relatório.
     pub index: usize,

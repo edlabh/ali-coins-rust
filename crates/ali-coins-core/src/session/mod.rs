@@ -19,7 +19,8 @@ pub use paths::{SessionPaths, resolve_session_paths};
 pub use prune::{clean_orphan_tmp_files, is_prunable_artifact, prune_session_backups};
 pub use storage_filter::{filter_storage_state, is_allowed_storage_key, should_filter_storage};
 pub use store::{
-    LoadedSession, SavedSession, clear_session, get_captcha_cooldown, load_session_files,
+    ImportOutcome, LoadedSession, SavedSession, clear_session, export_session_token,
+    get_captcha_cooldown, import_session_token, load_session_files, mark_session_imported,
     record_captcha_challenge, save_session, update_session_streak,
 };
 

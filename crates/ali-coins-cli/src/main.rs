@@ -5,6 +5,8 @@
 
 #![forbid(unsafe_code)]
 
+mod export_import;
+
 use ali_coins_core::config::{
     Config, DryRunSummary, EnvSource, load_accounts, mask_chat_id, mask_user,
 };
@@ -61,6 +63,14 @@ fn last_boolean_flag(args: &[String], positive: &str, negative: &str) -> Option<
 
 fn main() -> ExitCode {
     let raw: Vec<String> = std::env::args().collect();
+
+    // Subcomandos de sessão (compatíveis com os scripts do oráculo).
+    match raw.get(1).map(String::as_str) {
+        Some("export-session") => return export_import::run_export(&raw[2..]),
+        Some("import-session") => return export_import::run_import(&raw[2..]),
+        _ => {}
+    }
+
     let matches = command().get_matches_from(&raw);
     let json_mode = matches.get_flag("json");
 
@@ -69,7 +79,7 @@ fn main() -> ExitCode {
 
     if !matches.get_flag("dry-run") {
         eprintln!(
-            "ali-coins-rust {} — Fase 1: apenas --dry-run está implementado.",
+            "ali-coins-rust {} — Fase 1: use --dry-run, export-session ou import-session.",
             env!("CARGO_PKG_VERSION")
         );
         return ExitCode::from(1);

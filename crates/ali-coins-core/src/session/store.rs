@@ -420,6 +420,240 @@ pub fn get_captcha_cooldown(
     }
 }
 
+/// Resultado de uma importação.
+#[derive(Debug, Clone)]
+pub struct ImportOutcome {
+    /// Conta de destino.
+    pub user: String,
+    /// Caminho da sessão gravada.
+    pub session_path: PathBuf,
+    /// Se ficou cifrada at-rest.
+    pub encrypted: bool,
+}
+
+/// Exporta um token v3 portável `{ session, meta }` para a conta.
+///
+/// Reutiliza a sessão em disco, valida contra a conta, aplica o filtro de
+/// storage e cifra com o `SESSION_SECRET` (mínimo 32 caracteres).
+pub fn export_session_token(
+    options: &SessionOptions,
+    default_base: &Path,
+    env: &EnvSource,
+    account_user: &str,
+) -> Result<String, SessionError> {
+    let loaded = load_session_files(options, default_base, env)?;
+    let Some(session_data) = loaded.session_data else {
+        return Err(SessionError::Io(
+            "Nenhuma sessão ativa encontrada em disco.".to_string(),
+        ));
+    };
+    let validation =
+        super::validate_session(&session_data, loaded.meta_data.as_ref(), Some(account_user));
+    if !validation.valid {
+        return Err(SessionError::Io(
+            validation
+                .reason
+                .unwrap_or_else(|| "sessão inválida".to_string()),
+        ));
+    }
+
+    let config = encryption_config(env, options);
+    let secret = config.secret.as_deref().ok_or_else(|| {
+        SessionError::Crypto("SESSION_SECRET é obrigatório para exportar a sessão.".to_string())
+    })?;
+    if secret.chars().count() < 32 {
+        return Err(SessionError::Crypto(
+            "SESSION_SECRET deve conter no mínimo 32 caracteres.".to_string(),
+        ));
+    }
+
+    let filtered = if should_filter_storage(options, env) {
+        filter_storage_state(session_data)
+    } else {
+        session_data
+    };
+
+    let now = Utc::now();
+    let mut meta = serde_json::Map::new();
+    meta.insert(
+        "user".to_string(),
+        serde_json::Value::String(account_user.to_string()),
+    );
+    meta.insert(
+        "exportedAt".to_string(),
+        serde_json::Value::String(iso_timestamp(now)),
+    );
+    meta.insert(
+        "expiresAt".to_string(),
+        serde_json::Value::String(iso_timestamp(now + chrono::Duration::days(90))),
+    );
+    meta.insert(
+        "exportedFrom".to_string(),
+        serde_json::Value::String(crate::lock::hostname()),
+    );
+
+    let mut payload = serde_json::Map::new();
+    payload.insert("session".to_string(), filtered);
+    payload.insert("meta".to_string(), serde_json::Value::Object(meta));
+    let body =
+        serde_json::to_string_pretty(&serde_json::Value::Object(payload)).map_err(json_err)?;
+
+    crate::crypto::encrypt_session(&body, secret, &EncryptOptions::default())
+        .map_err(|err| SessionError::Crypto(err.to_string()))
+}
+
+/// Importa um token para a conta correspondente (auto-roteamento por `meta.user`).
+pub fn import_session_token(
+    options: &SessionOptions,
+    default_base: &Path,
+    env: &EnvSource,
+    token: &str,
+    expected_user: Option<&str>,
+    accounts: &[crate::config::Account],
+) -> Result<ImportOutcome, SessionError> {
+    let known_users: Vec<String> = accounts
+        .iter()
+        .map(|account| account.user.clone())
+        .collect();
+    let config = encryption_config(env, options);
+    let secret = config.secret.as_deref().ok_or_else(|| {
+        SessionError::Crypto("SESSION_SECRET é obrigatório para importar a sessão.".to_string())
+    })?;
+    if secret.chars().count() < 32 {
+        return Err(SessionError::Crypto(
+            "SESSION_SECRET deve conter no mínimo 32 caracteres.".to_string(),
+        ));
+    }
+    let decrypted = crate::crypto::decrypt_session(token.trim(), secret)
+        .map_err(|err| SessionError::Crypto(err.to_string()))?;
+    let payload: serde_json::Value = parse_json(&decrypted)?;
+    super::validate_session_payload(&payload).map_err(SessionError::Json)?;
+
+    let token_user = payload
+        .get("meta")
+        .and_then(|meta| meta.get("user"))
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string);
+
+    let target_user = match expected_user {
+        Some(expected) => {
+            if let Some(token_user) = token_user.as_deref() {
+                if !token_user.eq_ignore_ascii_case(expected) {
+                    return Err(SessionError::Io(format!(
+                        "O e-mail do token ({token_user}) não corresponde à conta selecionada ({expected})."
+                    )));
+                }
+            }
+            expected.to_string()
+        }
+        None => {
+            if known_users.len() == 1 {
+                known_users[0].clone()
+            } else {
+                let Some(token_user) = token_user else {
+                    return Err(SessionError::Io(
+                        "Token sem identificação de conta; use --account para escolher o destino."
+                            .to_string(),
+                    ));
+                };
+                known_users
+                    .iter()
+                    .find(|user| user.eq_ignore_ascii_case(&token_user))
+                    .cloned()
+                    .ok_or_else(|| {
+                        SessionError::Io(format!(
+                            "O e-mail do token ({token_user}) não corresponde a nenhuma conta configurada."
+                        ))
+                    })?
+            }
+        }
+    };
+
+    let session_value = payload
+        .get("session")
+        .cloned()
+        .ok_or_else(|| SessionError::Json("Payload sem campo session.".to_string()))?;
+
+    let mut save_options = options.clone();
+    if let Some(account) = accounts
+        .iter()
+        .find(|account| account.user.eq_ignore_ascii_case(&target_user))
+    {
+        save_options.session_path = Some(account.session_path.clone());
+    }
+    let saved = save_session(
+        &save_options,
+        default_base,
+        env,
+        session_value,
+        &target_user,
+    )?
+    .ok_or_else(|| {
+        SessionError::Io(
+            "Sessão recusada na gravação (sem cookie de autenticação ou criptografia exigida sem segredo)."
+                .to_string(),
+        )
+    })?;
+
+    // Marcadores de importação preservados do token.
+    let token_meta = payload.get("meta").cloned().unwrap_or_default();
+    let exported_at = token_meta
+        .get("exportedAt")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string);
+    let expires_at = token_meta
+        .get("expiresAt")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string);
+    let exported_from = token_meta
+        .get("exportedFrom")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string);
+    let _ = mark_session_imported(
+        &save_options,
+        default_base,
+        &target_user,
+        exported_at,
+        expires_at,
+        exported_from,
+    );
+
+    let paths = super::resolve_session_paths(&save_options, default_base);
+    Ok(ImportOutcome {
+        user: target_user,
+        session_path: paths.s_path,
+        encrypted: saved.meta.encrypted.unwrap_or(false),
+    })
+}
+
+/// Marca a sessão como importada no meta (preserva os demais campos).
+#[must_use]
+pub fn mark_session_imported(
+    options: &SessionOptions,
+    default_base: &Path,
+    user: &str,
+    exported_at: Option<String>,
+    expires_at: Option<String>,
+    exported_from: Option<String>,
+) -> Option<SessionMeta> {
+    let paths = super::resolve_session_paths(options, default_base);
+    let mut meta = read_meta(&paths.m_path).unwrap_or_default();
+    meta.user = Some(user.to_string());
+    meta.is_imported = Some(true);
+    meta.imported_at = Some(iso_timestamp(Utc::now()));
+    if exported_at.is_some() {
+        meta.exported_at = exported_at;
+    }
+    if expires_at.is_some() {
+        meta.expires_at = expires_at;
+    }
+    if exported_from.is_some() {
+        meta.exported_from = exported_from;
+    }
+    write_meta_pretty(&paths.m_path, &meta).ok()?;
+    Some(meta)
+}
+
 fn reencrypt(
     enc_path: &Path,
     value: &Value,

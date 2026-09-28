@@ -28,7 +28,7 @@ Depende de: `docs/01-avaliacao.md`, `docs/02-arquitetura.md`, `docs/adr/` (ADR-0
 
 Escopo: `core::config`, `crypto`, `session`, `lock`, `logging`, `time`, `report`, `notify`, `exit`; subcomando `--dry-run` funcional; `export-session`/`import-session` completos.
 
-**Status: em andamento (2026-09-28).** Concluído: `crypto`, `secure_fs`, `config`/env + `--dry-run`, `session`, `lock`, `logging`/`exit`, `time`, `url_guard`, `report` (puro) e `notify` completo (HTTP seguro + Telegram + heartbeat + webhooks). Pendentes: builders/render do `report` e `export-session`/`import-session`.
+**Status: concluída (2026-09-28), com pendências registradas.** Núcleo completo: `crypto`/`session`/`lock`/`config`/`logging`/`exit`/`time`/`url_guard`/`report` + builders/`notify` (HTTP seguro, Telegram, heartbeat, webhooks) e CLI (`--dry-run`, `export-session`, `import-session`). Pendências: render texto do relatório, flags `--rotate`/`--migrate` das CLIs de sessão e snapshot byte-a-byte do Telegram (D-02).
 
 **Entregáveis**
 - Parser de env com tabela declarativa + mensagens PT-BR; `credentials.env`/`accounts.json`; paths/hash por conta.
