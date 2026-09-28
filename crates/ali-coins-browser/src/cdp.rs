@@ -8,6 +8,7 @@
 
 use super::driver::{Browser, BrowserDriver, BrowserError, LaunchOptions, NavOptions, Page};
 use super::launch::DeviceProfile;
+use ali_coins_core::logging;
 use async_trait::async_trait;
 use chromiumoxide::browser::{Browser as CdpBrowser, BrowserConfig};
 use chromiumoxide::cdp::browser_protocol::emulation::{
@@ -172,22 +173,53 @@ impl Page for CdpPageHandle {
         // pequena demoram dezenas de segundos) nem depende de comando CDP
         // bloqueado pelo renderer ocupado.
         let timeout = options.timeout.unwrap_or(Duration::from_secs(35));
-        self.page
-            .execute(NavigateParams::new(url))
-            .await
-            .map_err(|err| BrowserError::Navigation(err.to_string()))?;
+        let started = Instant::now();
+        // Em VPS pequena o `Page.navigate` pode não responder enquanto o
+        // renderer está ocupado; a navegação segue e o polling confirma.
+        match tokio::time::timeout(
+            Duration::from_secs(20),
+            self.page.execute(NavigateParams::new(url)),
+        )
+        .await
+        {
+            Ok(Ok(_)) => {}
+            Ok(Err(err)) => return Err(BrowserError::Navigation(err.to_string())),
+            Err(_) => {
+                logging::global().warn(
+                    &format!("Page.navigate sem resposta em 20s; aguardando readyState de {url}"),
+                    &[],
+                );
+            }
+        }
         tokio::time::sleep(Duration::from_millis(500)).await;
         let deadline = Instant::now() + timeout;
         loop {
-            if let Ok(result) = self.page.evaluate_expression("document.readyState").await {
+            // Cada sondagem tem teto próprio para não travar se o renderer
+            // estiver ocupado (comandos CDP enfileirados).
+            let probe = tokio::time::timeout(
+                Duration::from_secs(5),
+                self.page.evaluate_expression("document.readyState"),
+            )
+            .await;
+            if let Ok(Ok(result)) = probe {
                 if let Ok(state) = result.into_value::<String>() {
                     if state == "interactive" || state == "complete" {
+                        logging::global().info(
+                            &format!(
+                                "navegação pronta ({state}) para {url} em {}ms",
+                                started.elapsed().as_millis()
+                            ),
+                            &[],
+                        );
                         return Ok(());
                     }
                 }
             }
             if Instant::now() >= deadline {
-                return Err(BrowserError::Timeout(format!("goto {url}")));
+                return Err(BrowserError::Timeout(format!(
+                    "goto {url} (readyState não atingido em {}ms)",
+                    started.elapsed().as_millis()
+                )));
             }
             tokio::time::sleep(Duration::from_millis(250)).await;
         }
