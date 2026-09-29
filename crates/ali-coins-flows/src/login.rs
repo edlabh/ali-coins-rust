@@ -4,9 +4,10 @@
 //! eventos `input/change`, submissão por botão/Enter, **2FA fail-fast em modo
 //! não-interativo** e validação de cookies de autenticação com retries.
 //!
-//! Divergências registradas: slider humanizado e seletores `:has-text`
-//! completos entram na paridade com o site real (D-07).
+//! D-07 concluído: slider humanizado (easing/jitter/frames) e seletores
+//! `:has-text` completos do oráculo.
 
+use crate::navigation;
 use ali_coins_browser::driver::{BrowserError, Page};
 use serde_json::Value;
 use std::time::{Duration, Instant};
@@ -25,12 +26,17 @@ pub mod selectors {
     /// Campo de senha.
     pub const PASSWORD_INPUTS: [&str; 2] = ["input[type=\"password\"]", "#fm-login-password"];
     /// Botão de continuar.
-    pub const CONTINUE_BUTTONS: [&str; 1] = ["button.cosmos-btn-primary"];
+    pub const CONTINUE_BUTTONS: [&str; 3] = [
+        "button.cosmos-btn-primary",
+        "button:has-text(\"Continue\")",
+        "button:has-text(\"Continuar\")",
+    ];
     /// Botão de entrar.
-    pub const SIGN_IN_BUTTONS: [&str; 3] = [
+    pub const SIGN_IN_BUTTONS: [&str; 4] = [
         "button.cosmos-btn-primary",
         "button[type=\"submit\"]",
-        "#fm-login-submit",
+        "button:has-text(\"Sign in\")",
+        "button:has-text(\"Entrar\")",
     ];
     /// Campo de 2FA (específico; nunca genérico).
     pub const TWO_FACTOR_INPUTS: [&str; 4] = [
@@ -39,8 +45,14 @@ pub mod selectors {
         "input[autocomplete=\"one-time-code\"]",
         "input.check-code-input[type=\"tel\"][maxlength=\"6\"]",
     ];
-    /// Handle do slider anti-bot.
-    pub const SLIDER_HANDLE: [&str; 2] = ["#nc_1_n1z", ".btn_slide"];
+    /// Handle do slider anti-bot (lista do oráculo).
+    pub const SLIDER_HANDLE: [&str; 5] = [
+        "#nc_1_n1z",
+        ".btn_slide",
+        "span[class*=\"btn_slide\"]",
+        "#nc_1__scale_text .btn_slide",
+        "div[id*=\"nocaptcha\"] .btn_slide",
+    ];
 }
 
 /// Cookies que comprovam autenticação.
@@ -125,29 +137,6 @@ async fn first_present(page: &dyn Page, candidates: &[&str], timeout: Duration) 
     None
 }
 
-/// Clica no primeiro elemento VISÍVEL de cada seletor (ignora botões ocultos).
-async fn click_visible(page: &dyn Page, candidates: &[&str]) -> Option<String> {
-    for candidate in candidates {
-        let script = format!(
-            "(() => {{ const els = document.querySelectorAll({}); \
-             for (const el of els) {{ const r = el.getBoundingClientRect(); \
-             if (r.width > 0 && r.height > 0 && el.offsetParent !== null) {{ el.click(); return true; }} }} \
-             return false; }})()",
-            serde_json::to_string(candidate).unwrap_or_default()
-        );
-        let clicked = page
-            .eval_raw(&script)
-            .await
-            .ok()
-            .and_then(|value| value.as_bool())
-            .unwrap_or(false);
-        if clicked {
-            return Some((*candidate).to_string());
-        }
-    }
-    None
-}
-
 /// Aguarda qualquer um dos seletores até o deadline, re-testando em ciclos curtos.
 async fn wait_for_any(page: &dyn Page, candidates: &[&str], timeout: Duration) -> Option<String> {
     let deadline = Instant::now() + timeout;
@@ -200,6 +189,25 @@ pub async fn has_captcha_challenge(page: &dyn Page, timeout: Duration) -> bool {
         .is_some()
 }
 
+/// Clica o primeiro seletor disponível (CSS aguarda visibilidade; `:has-text`
+/// é resolvido pelo helper de navegação).
+async fn click_first_of(page: &dyn Page, candidates: &[&str], timeout: Duration) -> bool {
+    for selector in candidates {
+        if selector.contains(":has-text(") {
+            if navigation::click_selector_or_text(page, selector).await {
+                return true;
+            }
+            continue;
+        }
+        if page.wait_for_selector(selector, timeout).await.is_ok()
+            && navigation::click_selector_or_text(page, selector).await
+        {
+            return true;
+        }
+    }
+    false
+}
+
 /// Valida os cookies de autenticação no storage state.
 pub async fn has_auth_cookies(page: &dyn Page) -> Result<bool, LoginError> {
     let state: Value = page.storage_state().await?;
@@ -228,6 +236,7 @@ pub async fn run_login(
 ) -> Result<LoginOutcome, LoginError> {
     log_info("Iniciando fluxo de login.");
     // 1. Usuário (fluxo completo) — ausente no SPA que pede só senha.
+    let mut username_found = false;
     if let Some(username_selector) = wait_for_any(
         page,
         &selectors::USERNAME_INPUTS,
@@ -235,9 +244,12 @@ pub async fn run_login(
     )
     .await
     {
+        username_found = true;
         log_info(&format!("Campo de usuário detectado: {username_selector}"));
         fill_input(page, &username_selector, user).await?;
         press_enter(page, &username_selector).await?;
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        let _ = navigation::solve_slider(page).await;
     }
 
     // 2. Senha (o SPA pode revelar o campo após um round-trip).
@@ -249,11 +261,11 @@ pub async fn run_login(
     .await;
     if password_selector.is_none() {
         // Fallback do oráculo: botão Continue após o usuário.
-        if let Some(button) =
-            first_present(page, &selectors::CONTINUE_BUTTONS, options.detect_timeout).await
-        {
-            log_info(&format!("Clicando em continuar: {button}"));
-            let _ = click_visible(page, &selectors::CONTINUE_BUTTONS).await;
+        if click_first_of(page, &selectors::CONTINUE_BUTTONS, options.detect_timeout).await {
+            log_info("Clicando em continuar.");
+            let _ = wait_for_any(page, &selectors::PASSWORD_INPUTS, Duration::from_secs(2)).await;
+            tokio::time::sleep(Duration::from_millis(500)).await;
+            let _ = navigation::solve_slider(page).await;
         }
         password_selector = wait_for_any(
             page,
@@ -264,18 +276,20 @@ pub async fn run_login(
     }
     if let Some(password_selector) = password_selector {
         log_info(&format!("Campo de senha detectado: {password_selector}"));
+        if !username_found {
+            // Modo somente-senha: o captcha pode estar visível antes do envio.
+            let _ = navigation::solve_slider(page).await;
+        }
         fill_input(page, &password_selector, password).await?;
         tokio::time::sleep(Duration::from_millis(300)).await;
-        if let Some(button) =
-            wait_for_any(page, &selectors::SIGN_IN_BUTTONS, Duration::from_secs(5)).await
-        {
-            log_info(&format!("Submetendo login pelo botão: {button}"));
-            let clicked = click_visible(page, &selectors::SIGN_IN_BUTTONS).await;
-            log_info(&format!("Botão visível clicado: {clicked:?}"));
+        if click_first_of(page, &selectors::SIGN_IN_BUTTONS, Duration::from_secs(5)).await {
+            log_info("Submetendo login pelo botão.");
         } else {
             log_info("Submetendo login com Enter.");
             press_enter(page, &password_selector).await?;
         }
+        tokio::time::sleep(Duration::from_millis(1000)).await;
+        let _ = navigation::solve_slider(page).await;
         tokio::time::sleep(Duration::from_secs(2)).await;
         log_info(&format!(
             "URL após submit: {}",
