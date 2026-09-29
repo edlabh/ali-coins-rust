@@ -48,8 +48,8 @@ ali-coins tasks              # apenas o painel "Ganhe mais moedas"
 | `ali-coins checkin [--json] [--force] [--account <id>]` | Check-in diário |
 | `ali-coins tasks [--json] [--force]` | Tarefas diárias |
 | `ali-coins notify-test` | Envia uma mensagem de teste no Telegram |
-| `ali-coins export-session [--all] [--account <id>] [--show-token]` | Exporta sessão cifrada (token v3) |
-| `ali-coins import-session [--all] [--from-file <path>] [--plaintext] [--keep-tokens]` | Importa sessão (stdin/arquivo ≤ 2 MiB) |
+| `ali-coins export-session [--all] [--account <id>] [--show-token] [--rotate] [--new-secret-from-env <VAR>]` | Exporta sessão cifrada (token v3); `--rotate` gira a chave at-rest |
+| `ali-coins import-session [--all] [--from-file <path>] [--plaintext] [--keep-tokens] [--migrate]` | Importa sessão (stdin/arquivo ≤ 2 MiB); `--migrate` converte `session.json` legado em `.enc` |
 
 ### Códigos de saída
 

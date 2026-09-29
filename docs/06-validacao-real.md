@@ -245,3 +245,23 @@ Validação ao vivo (`checkin` avulso e `all` na VM):
 - Regressão ao vivo (`all` na VM): 6 tarefas `Concluída`, surprise ainda
   `Falhou (sem progresso…)` (D-10 parado), `meta` idêntico
   (`+61 moedas`, saldo `1042`) e duração total `6m 45s`.
+
+## Fase 1 fechada — `--rotate`/`--migrate` e relatório em texto (2026-09-29)
+
+- `export-session --rotate [--all] [--account <id>] [--new-secret-from-env=VAR]`
+  (port de `rotateSessionSecret`): chave antiga = `SESSION_SECRET_OLD` (ou
+  `SESSION_SECRET`); nova = env do `VAR` (padrão `SESSION_SECRET_NEW`) ou
+  `SESSION_SECRET` quando há `SESSION_SECRET_OLD`; backup versionado em
+  `scratch/session.bak-*.json.enc`, re-cifra com roundtrip antes de gravar,
+  remove o texto claro e atualiza `lastRotatedAt`/`encrypted` no meta.
+- `import-session --migrate [--all] [--account <id>] [--json]` (port de
+  `migrateLegacySession`): migra `session.json` legado para `.enc` com schema
+  validado, preserva `.enc` existente como backup e só remove o texto claro
+  após verificação do roundtrip.
+- Relatório em texto (sem `--json`): `all` imprime o **RELATÓRIO CONSOLIDADO
+  FINAL** (conta, sequência, check-in, tarefas com moedas, total do dia, saldo,
+  horários e durações); `checkin` e `tasks` imprimem seus resumos próprios.
+- Validação na VM (diretório temporário, sem tocar a sessão real):
+  `import-session --migrate --json` → `{cookiesCount:1, migrated:true,
+  encrypted:true}`; `export-session --rotate` com `SESSION_SECRET_NEW` →
+  `[SUCESSO] Rotação de chave concluída` + backup versionado.
