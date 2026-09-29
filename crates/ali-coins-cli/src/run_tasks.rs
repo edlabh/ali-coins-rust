@@ -160,10 +160,12 @@ pub fn run(args: &[String]) -> StdExitCode {
             }
 
             let started = Instant::now();
+            let started_at = chrono::Utc::now();
             let options = TasksOptions::from_config(&config);
             let run = run_tasks(&*page, &*browser, &options)
                 .await
                 .map_err(|error| error.to_string())?;
+            let ended_at = chrono::Utc::now();
             let duration = ali_coins_core::time::format_duration(
                 i64::try_from(started.elapsed().as_millis()).unwrap_or(i64::MAX),
             );
@@ -194,7 +196,11 @@ pub fn run(args: &[String]) -> StdExitCode {
                 .results
                 .iter()
                 .map(|outcome| {
-                    serde_json::json!({ "title": outcome.title, "status": outcome.status })
+                    serde_json::json!({
+                        "title": outcome.title,
+                        "status": outcome.status,
+                        "coins": outcome.coins
+                    })
                 })
                 .collect();
             #[allow(clippy::cast_precision_loss)]
@@ -208,6 +214,8 @@ pub fn run(args: &[String]) -> StdExitCode {
                     .map(|value| NumOrText::Text(value.to_string())),
                 final_coins: final_balance.map(|value| format!("{value} moedas")),
                 duration: Some(duration),
+                start_time: Some(started_at.to_rfc3339()),
+                end_time: Some(ended_at.to_rfc3339()),
                 ..TasksInput::default()
             };
             let payload = build_unified_report_payload(
@@ -215,6 +223,9 @@ pub fn run(args: &[String]) -> StdExitCode {
                 Some(&tasks_input),
                 &UnifiedMeta {
                     user: Some(&account.user),
+                    total_duration: Some(tasks_input.duration.as_deref().unwrap_or_default()),
+                    main_start_time: Some(started_at),
+                    main_end_time: Some(ended_at),
                     ..UnifiedMeta::default()
                 },
             );
@@ -224,14 +235,7 @@ pub fn run(args: &[String]) -> StdExitCode {
                     serde_json::to_string_pretty(&payload).unwrap_or_else(|_| "{}".to_string())
                 );
             } else {
-                logging::global().info(
-                    &format!(
-                        "Tarefas processadas: {} (ações: {})",
-                        run.results.len(),
-                        run.actions
-                    ),
-                    &[],
-                );
+                crate::report_render::render_tasks(&tasks_input);
             }
             // Notificação rica (best-effort) para execuções avulsas de tarefas.
             if config.telegram_enabled {

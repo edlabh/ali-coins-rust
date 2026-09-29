@@ -19,6 +19,13 @@ scratch/
 # Fixtures com dados gerados localmente (mantidas fora do git salvo decisão)
 # tools/parity/fixtures/**/*.generated.json
 
+# Exceção: fixtures de paridade de sessão são sintéticas (usuário/segredo fake)
+# e precisam estar no CI para os testes de interop.
+!tools/parity/fixtures/session/plain/
+!tools/parity/fixtures/session/plain/**
+!tools/parity/fixtures/session/encrypted/
+!tools/parity/fixtures/session/encrypted/**
+
 # Editores/SO
 .DS_Store
 *.swp

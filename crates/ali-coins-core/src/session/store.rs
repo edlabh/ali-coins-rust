@@ -672,7 +672,7 @@ fn reencrypt(
     Ok(())
 }
 
-fn read_meta(path: &Path) -> Option<SessionMeta> {
+pub(crate) fn read_meta(path: &Path) -> Option<SessionMeta> {
     let raw = std::fs::read_to_string(path).ok()?;
     serde_json::from_str(&raw).ok()
 }

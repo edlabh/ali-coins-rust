@@ -5,12 +5,16 @@
 //! 0600 com filtro de storage, metadados, streak, cooldown de captcha, backup
 //! e poda de artefatos.
 
+pub mod key_rotate;
 pub mod model;
 pub mod paths;
 pub mod prune;
 pub mod storage_filter;
 pub mod store;
 
+pub use key_rotate::{
+    MigrateOutcome, RotateOutcome, migrate_legacy_session, rotate_session_secret,
+};
 pub use model::{
     SessionMeta, Validation, is_captcha_cooldown_active, is_cookie_expired, is_imported_session,
     validate_session, validate_session_payload,
@@ -42,6 +46,8 @@ pub struct SessionOptions {
     pub secret: Option<String>,
     /// `SESSION_SECRET_OLD` explícito.
     pub old_secret: Option<String>,
+    /// `SESSION_SECRET_NEW` explícito (rotação de chave).
+    pub new_secret: Option<String>,
     /// `ENCRYPT_LOCAL_SESSION` explícito.
     pub encrypt_local_session: Option<bool>,
     /// `SESSION_STRICT_STORAGE` explícito.
