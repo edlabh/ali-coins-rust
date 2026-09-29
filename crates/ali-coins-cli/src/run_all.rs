@@ -11,7 +11,7 @@ use ali_coins_core::notify::{
     build_unified_report_message, send_telegram,
 };
 use ali_coins_core::report::{
-    CheckinInput, NumOrText, StreakValue, TasksInput, UnifiedMeta, build_unified_report_payload,
+    CheckinInput, NumOrText, TasksInput, UnifiedMeta, build_unified_report_payload,
     checkin_coins_from_streak,
 };
 use ali_coins_core::session::{SessionOptions, load_session_files, save_session, validate_session};
@@ -167,12 +167,11 @@ pub fn run(args: &[String]) -> StdExitCode {
                 + chrono::Duration::milliseconds(i64::try_from(delay_ms).unwrap_or(i64::MAX));
             logging::global().info(
                 &format!(
-                    "Início atrasado em {}s (janela {}–{}s; início previsto às {} {})",
+                    "Início atrasado em {}s (janela {}–{}s; início previsto às {})",
                     delay_ms / 1000,
                     config.start_delay_min_ms / 1000,
                     config.start_delay_max_ms / 1000,
-                    ali_coins_core::time::format_time(target),
-                    ali_coins_core::time::get_report_timezone_label(target)
+                    crate::checkin_parity::format_target_time(target)
                 ),
                 &[],
             );
@@ -217,7 +216,12 @@ pub fn run(args: &[String]) -> StdExitCode {
 
             // Sessão existente (se válida, evita login).
             let mut storage_state = None;
+            let mut previous_streak_days = None;
             if let Ok(loaded) = load_session_files(&session_options, &base_dir, &env) {
+                previous_streak_days = loaded
+                    .meta_data
+                    .as_ref()
+                    .and_then(|meta| meta.last_streak_days);
                 if let Some(session_data) = &loaded.session_data {
                     if validate_session(
                         session_data,
@@ -267,6 +271,14 @@ pub fn run(args: &[String]) -> StdExitCode {
                 let _ = page.seed_storage_state(state).await;
             }
 
+            // Pré-checagem desktop (D-08): saldo/streak/extrato antes do mobile.
+            let early_desktop = crate::checkin_parity::read_early_desktop(
+                &*browser,
+                storage_state.as_ref(),
+                Duration::from_millis(config.nav_timeout_short),
+            )
+            .await;
+
             let main_started = Instant::now();
             let element_timeout = Duration::from_millis(config.element_timeout);
             let selector_timeout = Duration::from_millis(config.selector_timeout);
@@ -293,44 +305,95 @@ pub fn run(args: &[String]) -> StdExitCode {
                 &[],
             );
 
-            // Salva a sessão (cookies renovados + streak).
+            let just_collected = result.collected;
             let state_after_checkin = page.storage_state().await.ok();
+
+            // Coleta de água da Fazenda Mágica (trecho do collect.js).
+            let _ = crate::checkin_parity::collect_water(&*page).await;
+
+            // Saldo/streak/extrato após o check-in (reusa a checagem inicial quando
+            // nada foi coletado, como o oráculo).
+            let desktop_after_checkin = if crate::checkin_parity::should_reuse_early_desktop(
+                just_collected,
+                early_desktop.as_ref(),
+            ) {
+                logging::global().info(
+                    "Saldo/streak reutilizados da checagem inicial do desktop (sem nova leitura).",
+                    &[],
+                );
+                early_desktop.clone()
+            } else {
+                ali_coins_flows::desktop::read_desktop_report(
+                    &*browser,
+                    state_after_checkin.as_ref(),
+                    Duration::from_millis(config.nav_timeout_short),
+                )
+                .await
+            };
+            let was_already_collected_today = desktop_after_checkin
+                .as_ref()
+                .is_some_and(|data| data.has_checkin_today);
+            let bonus_from_ledger = desktop_after_checkin
+                .as_ref()
+                .and_then(|data| data.today_bonus_coins);
+            let checkin_coins_from_ledger = bonus_from_ledger.is_some_and(|value| value > 0);
+            let already_collected =
+                (result.already_collected || was_already_collected_today) && !just_collected;
+            let confirmed_by_ledger = crate::checkin_parity::should_confirm_checkin_by_ledger(
+                just_collected,
+                already_collected,
+                checkin_coins_from_ledger,
+            );
+            let resolved = crate::checkin_parity::resolve_streak(
+                result.streak_days,
+                previous_streak_days,
+                early_desktop.as_ref().and_then(|data| data.desktop_streak),
+                just_collected,
+                already_collected,
+                confirmed_by_ledger,
+                desktop_after_checkin
+                    .as_ref()
+                    .and_then(|data| data.desktop_streak),
+            );
+            let streak_days = crate::checkin_parity::resolved_streak_number(&resolved);
+            let streak_value = resolved.streak_days.clone();
+            let checkin_coins = if let Some(bonus) = bonus_from_ledger {
+                Some(bonus)
+            } else if !already_collected && (just_collected || confirmed_by_ledger) {
+                Some(checkin_coins_from_streak(Some(&streak_value)))
+            } else {
+                None
+            };
+            let mobile_balance = page
+                .content()
+                .await
+                .ok()
+                .and_then(|content| parse_total_balance(&content));
+            let raw_balance = desktop_after_checkin
+                .as_ref()
+                .and_then(|data| data.total_balance.clone())
+                .or_else(|| result.total_balance.clone())
+                .or(mobile_balance);
+            let balance_after_checkin = crate::checkin_parity::sync_balance_after_checkin(
+                just_collected,
+                checkin_coins,
+                raw_balance.as_deref(),
+                early_desktop
+                    .as_ref()
+                    .and_then(|data| data.total_balance.as_deref()),
+            )
+            .or(raw_balance);
+
+            // Salva a sessão (cookies renovados + streak resolvido).
             if let Some(state) = &state_after_checkin {
                 let mut save_options = session_options.clone();
-                save_options.streak_days = result.streak_days;
+                save_options.streak_days = streak_days;
                 if save_session(&save_options, &base_dir, &env, state.clone(), &account.user)
                     .is_ok()
                 {
                     logging::global().info("Sessão atualizada em disco.", &[]);
                 }
             }
-
-            // Saldo/streak/extrato do dia no desktop (fonte de verdade do oráculo).
-            let desktop_after_checkin = ali_coins_flows::desktop::read_desktop_report(
-                &*browser,
-                state_after_checkin.as_ref(),
-                Duration::from_millis(config.nav_timeout_short),
-            )
-            .await;
-            let bonus_from_ledger = desktop_after_checkin
-                .as_ref()
-                .and_then(|data| data.today_bonus_coins);
-            let checkin_coins_from_ledger = bonus_from_ledger.is_some_and(|value| value > 0);
-            let streak_days = result.streak_days.or_else(|| {
-                desktop_after_checkin
-                    .as_ref()
-                    .and_then(|data| data.desktop_streak)
-            });
-            let mobile_balance = page
-                .content()
-                .await
-                .ok()
-                .and_then(|content| parse_total_balance(&content));
-            let balance_after_checkin = desktop_after_checkin
-                .as_ref()
-                .and_then(|data| data.total_balance.clone())
-                .or_else(|| result.total_balance.clone())
-                .or(mobile_balance);
 
             // ----- ETAPA 2/2: tarefas diárias -----
             let step2_started = Instant::now();
@@ -403,17 +466,8 @@ pub fn run(args: &[String]) -> StdExitCode {
             });
 
             // ----- ETAPA 3/3: relatório consolidado + notificação única -----
-            let streak_value = streak_days
-                .map_or_else(|| StreakValue::Text("N/D".to_string()), StreakValue::Number);
-            let checkin_coins = if let Some(bonus) = bonus_from_ledger {
-                Some(bonus)
-            } else if !result.already_collected && result.collected {
-                Some(checkin_coins_from_streak(Some(&streak_value)))
-            } else {
-                None
-            };
             let checkin_input = CheckinInput {
-                already_collected: Some(result.already_collected),
+                already_collected: Some(already_collected),
                 coins_gained_today: checkin_coins.map(|value| value.to_string()),
                 streak_days: Some(streak_value),
                 total_balance: balance_after_checkin.clone(),
@@ -474,10 +528,10 @@ pub fn run(args: &[String]) -> StdExitCode {
                 logging::global().info(
                     &format!(
                         "Execução concluída: check-in {} | tarefas {} | duração {}",
-                        if result.already_collected {
-                            "já coletado"
-                        } else if result.collected {
+                        if just_collected || confirmed_by_ledger {
                             "coletado"
+                        } else if already_collected {
+                            "já coletado"
                         } else {
                             "sem ação"
                         },
@@ -491,7 +545,7 @@ pub fn run(args: &[String]) -> StdExitCode {
                 );
             }
 
-            let had_new_checkin = !result.already_collected || checkin_coins_from_ledger;
+            let had_new_checkin = !already_collected || checkin_coins_from_ledger;
             let had_task_actions = tasks_run.as_ref().is_some_and(|run| run.actions > 0);
             let event = if !had_new_checkin && !had_task_actions {
                 TelegramEvent::AlreadyCollected
