@@ -8,7 +8,7 @@ use ali_coins_core::lock::{LockError, LockOptions, acquire};
 use ali_coins_core::notify::{
     SafeHttpClient, TelegramConfig, TelegramEvent, build_unified_report_message, send_telegram,
 };
-use ali_coins_core::report::{TasksInput, UnifiedMeta, build_unified_report_payload};
+use ali_coins_core::report::{NumOrText, TasksInput, UnifiedMeta, build_unified_report_payload};
 use ali_coins_core::session::{SessionOptions, load_session_files, save_session, validate_session};
 use ali_coins_core::{exit::ExitCode, logging};
 use ali_coins_flows::login::has_auth_cookies;
@@ -165,20 +165,44 @@ pub fn run(args: &[String]) -> StdExitCode {
             );
 
             // Persiste a sessão (cookies renovados pelas navegações).
-            if let Ok(state) = page.storage_state().await {
-                let _ = save_session(&session_options, &base_dir, &env, state, &account.user);
+            let final_state = page.storage_state().await.ok();
+            if let Some(state) = &final_state {
+                let _ = save_session(
+                    &session_options,
+                    &base_dir,
+                    &env,
+                    state.clone(),
+                    &account.user,
+                );
             }
 
+            // Extrato desktop: saldo final + ganhos reais das tarefas.
+            let desktop = ali_coins_flows::desktop::read_desktop_report(
+                &*browser,
+                final_state.as_ref(),
+                Duration::from_millis(config.nav_timeout_short),
+            )
+            .await;
+            let missions_from_ledger = desktop.as_ref().and_then(|data| data.today_missions_coins);
+            let final_balance = desktop.as_ref().and_then(|data| data.total_balance.clone());
+
             let results: Vec<serde_json::Value> = run
-            .results
-            .iter()
-            .map(|outcome| {
-                serde_json::json!({ "title": outcome.title, "status": outcome.status })
-            })
-            .collect();
+                .results
+                .iter()
+                .map(|outcome| {
+                    serde_json::json!({ "title": outcome.title, "status": outcome.status })
+                })
+                .collect();
+            #[allow(clippy::cast_precision_loss)]
+            let tasks_coins = missions_from_ledger.map(|value| value as f64);
             let tasks_input = TasksInput {
                 results: Some(results),
-                final_coins: Some("N/D".to_string()),
+                coins_gained: tasks_coins,
+                coins_from_ledger: Some(missions_from_ledger.is_some()),
+                final_balance: final_balance
+                    .as_deref()
+                    .map(|value| NumOrText::Text(value.to_string())),
+                final_coins: final_balance.map(|value| format!("{value} moedas")),
                 duration: Some(duration),
                 ..TasksInput::default()
             };

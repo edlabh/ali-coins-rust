@@ -135,6 +135,105 @@ pub fn extract_today_ledger(today_section: &str) -> LedgerExtract {
     }
 }
 
+/// Saldo total no texto visível do desktop (`My coins`/`Minhas moedas`).
+///
+/// Equivale às regexes de `libs/ui/balance.js::getBalanceDesktop`: o número
+/// fica na linha seguinte ao rótulo (bilíngue, com separador de milhar), com
+/// fallback para o padrão `<número>\n<saves>`. Devolve só os dígitos.
+#[must_use]
+pub fn parse_desktop_balance(text: &str) -> Option<String> {
+    if text.is_empty() {
+        return None;
+    }
+    let labeled = compiled(r"(?i)(?:My coins|Minhas moedas)\s*\n\s*([0-9][0-9.,]*)");
+    let saves = compiled(r"(?i)([0-9][0-9.,]*)\s*\n\s*saves");
+    let captured = labeled.captures(text).or_else(|| saves.captures(text))?;
+    let digits: String = captured
+        .get(1)?
+        .as_str()
+        .chars()
+        .filter(char::is_ascii_digit)
+        .collect();
+    (!digits.is_empty()).then_some(digits)
+}
+
+/// Seção do extrato pertencente a `today_pt` (as datas do mycoin são PT).
+///
+/// Aceita a data em pt-BR (`DD/MM/AAAA PT`) e en-US (`M/D/AAAA PT`); sem
+/// correspondência direta, compara a data normalizada de cada bloco — mesma
+/// estratégia de `getBalanceDesktop`.
+#[must_use]
+pub fn extract_today_section(text: &str, today_pt: chrono::NaiveDate) -> Option<String> {
+    if text.is_empty() {
+        return None;
+    }
+    let pt_br = format!(
+        "{:02}/{:02}/{} PT",
+        today_pt.day(),
+        today_pt.month(),
+        today_pt.year()
+    );
+    let pt_us = format!(
+        "{}/{}/{} PT",
+        today_pt.month(),
+        today_pt.day(),
+        today_pt.year()
+    );
+    let date_re = compiled(r"[0-9]{1,2}/[0-9]{1,2}/[0-9]{4}\s*PT");
+
+    if let Some(section) = section_after(text, &pt_br, date_re) {
+        return Some(section);
+    }
+    if let Some(section) = section_after(text, &pt_us, date_re) {
+        return Some(section);
+    }
+
+    // Fallback: qualquer grafia cuja data normalizada seja a de hoje.
+    let today = (today_pt.day(), today_pt.month(), today_pt.year());
+    for found in date_re.find_iter(text) {
+        if normalize_pt_date(found.as_str()) == Some(today) {
+            let rest = &text[found.end()..];
+            let end = date_re.find(rest).map_or(rest.len(), |next| next.start());
+            return Some(rest[..end].to_string());
+        }
+    }
+    None
+}
+
+/// Sequência no desktop: texto explícito > máximo (histórico, tier do bônus).
+#[must_use]
+pub fn desktop_streak(
+    text: &str,
+    today_pt: chrono::NaiveDate,
+    today_checkin_coins: Option<&str>,
+) -> Option<i64> {
+    if let Some(found) = extract_streak_from_text(text) {
+        return Some(found);
+    }
+    let history = get_streak_from_desktop_history(text, today_pt).unwrap_or(0);
+    let tier = streak_from_checkin_coins(today_checkin_coins).unwrap_or(0);
+    let calculated = history.max(tier);
+    (calculated > 0).then_some(calculated)
+}
+
+/// Texto após o primeiro `needle`, limitado à próxima data PT (se houver).
+fn section_after(text: &str, needle: &str, date_re: &regex::Regex) -> Option<String> {
+    let (_, rest) = text.split_once(needle)?;
+    let end = date_re.find(rest).map_or(rest.len(), |next| next.start());
+    Some(rest[..end].to_string())
+}
+
+/// `D/M/AAAA PT` → `(dia, mês, ano)` com zeros à esquerda tolerados.
+fn normalize_pt_date(raw: &str) -> Option<(u32, u32, i32)> {
+    let trimmed = raw.trim();
+    let clean = trimmed.strip_suffix("PT").unwrap_or(trimmed).trim();
+    let mut parts = clean.split('/');
+    let day = parts.next()?.trim().parse::<u32>().ok()?;
+    let month = parts.next()?.trim().parse::<u32>().ok()?;
+    let year = parts.next()?.trim().parse::<i32>().ok()?;
+    Some((day, month, year))
+}
+
 /// Extrai a sequência de check-ins consecutivos do histórico do extrato desktop.
 ///
 /// `today_la` é a data de "hoje" no fuso `America/Los_Angeles` (injetável para testes);
@@ -381,5 +480,82 @@ mod tests {
             get_streak_from_desktop_history(text, date(2026, 9, 25)),
             Some(1)
         );
+    }
+
+    #[test]
+    fn saldo_do_desktop_bilingue() {
+        assert_eq!(
+            parse_desktop_balance("Minhas moedas\n2.980\nMissões de moedas"),
+            Some("2980".to_string())
+        );
+        assert_eq!(
+            parse_desktop_balance("My coins\n1,234\nsaves"),
+            Some("1234".to_string())
+        );
+        assert_eq!(
+            parse_desktop_balance("2.980\nsaves"),
+            Some("2980".to_string())
+        );
+        assert_eq!(parse_desktop_balance("sem saldo"), None);
+        assert_eq!(parse_desktop_balance(""), None);
+    }
+
+    #[test]
+    fn secao_de_hoje_pt_e_us() {
+        let today = date(2026, 9, 28);
+        let pt = "Minhas moedas\n2.980\n28/09/2026 PT\nBônus diário\n+20\nCoin page task\n+5\n27/09/2026 PT\nBônus diário\n+15";
+        let section = extract_today_section(pt, today).expect("seção de hoje");
+        assert!(section.contains("Bônus diário\n+20"));
+        assert!(section.contains("Coin page task\n+5"));
+        assert!(!section.contains("+15"));
+
+        let us = "My coins\n1,234\n9/28/2026 PT\nDaily bonus\n+20\n9/27/2026 PT\nDaily bonus\n+15";
+        let section = extract_today_section(us, today).expect("seção de hoje (en)");
+        assert!(section.contains("Daily bonus\n+20"));
+        assert!(!section.contains("+15"));
+
+        // Grafia com zero à esquerda no formato en-US cai no fallback normalizado.
+        let padded =
+            "My coins\n1,234\n09/28/2026 PT\nDaily bonus\n+20\n09/27/2026 PT\nDaily bonus\n+15";
+        let section = extract_today_section(padded, today).expect("seção de hoje (fallback)");
+        assert!(section.contains("Daily bonus\n+20"));
+        assert!(!section.contains("+15"));
+
+        assert!(
+            extract_today_section("My coins\n1,234\n9/27/2026 PT\nDaily bonus\n+15", today)
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn ledger_de_hoje_classifica_bonus_e_missoes() {
+        let today = date(2026, 9, 28);
+        let text = "My coins\n2,980\n28/09/2026 PT\nBônus diário\n+1\nCoin page task\n+56\n26/09/2026 PT\nBônus diário\n+40";
+        let section = extract_today_section(text, today).expect("seção de hoje");
+        let ledger = extract_today_ledger(&section);
+        assert_eq!(ledger.bonus_coins, Some(1));
+        assert_eq!(ledger.missions_coins, 56);
+        assert_eq!(ledger.missions_count, 1);
+    }
+
+    #[test]
+    fn streak_do_desktop_prefere_texto_e_cai_para_calculo() {
+        let today = date(2026, 9, 28);
+        let explicit =
+            "Minhas moedas\n2.980\nSequência de 12 dias\n28/09/2026 PT\nBônus diário\n+20";
+        assert_eq!(desktop_streak(explicit, today, Some("20")), Some(12));
+
+        // Histórico de 2 dias, mas bônus +20 (tier 3): o oráculo usa max(histórico, tier).
+        let history = "Minhas moedas\n2.980\n28/09/2026 PT App daily check-in\n+20\n27/09/2026 PT App daily check-in\n+15";
+        assert_eq!(desktop_streak(history, today, Some("20")), Some(3));
+
+        // Histórico de 3 dias supera o tier (+15 → dia 2).
+        let history3 = "Minhas moedas\n2.980\n28/09/2026 PT App daily check-in\n+15\n27/09/2026 PT App daily check-in\n+15\n26/09/2026 PT App daily check-in\n+15";
+        assert_eq!(desktop_streak(history3, today, Some("15")), Some(3));
+
+        let tier_only = "Minhas moedas\n2.980\nBônus diário\n+40";
+        assert_eq!(desktop_streak(tier_only, today, Some("40")), Some(7));
+
+        assert_eq!(desktop_streak("Minhas moedas\n2.980", today, None), None);
     }
 }

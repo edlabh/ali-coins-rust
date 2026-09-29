@@ -67,7 +67,7 @@ Escopo: `browser::cdp` (launch/cascata de args, sanitização de env, low-memory
 
 ## Fase 3 — Check-in (1,5–2 semanas)
 
-**Status: concluída com validação real (2026-09-28).** Parsers, login (SPA in-page com botão visível), orquestração do `checkin` e CLI validados contra o AliExpress real: run 1 coletou o check-in (exit 0) e run 2 confirmou `alreadyCollected` (exit 2). Evidências em `docs/06-validacao-real.md`. Pendências finas: saldo/ledger do desktop (D-08) e slider (D-07).
+**Status: concluída com validação real (2026-09-28).** Parsers, login (SPA in-page com botão visível), orquestração do `checkin` e CLI validados contra o AliExpress real: run 1 coletou o check-in (exit 0) e run 2 confirmou `alreadyCollected` (exit 2). Evidências em `docs/06-validacao-real.md`. Pendências finas: pré-checagem/sync/água do desktop (D-08 — saldo/ledger já em produção desde 29/09) e slider (D-07).
 
 Escopo: `flows::login`, `balance`, `checkin` + `ui::navigation` (goto/retry/closeModals/slider).
 
@@ -85,6 +85,8 @@ Escopo: `flows::login`, `balance`, `checkin` + `ui::navigation` (goto/retry/clos
 ---
 
 ## Fase 4 — Tarefas (2–3 semanas)
+
+**Status: pendente (2026-09-29).** O runner atual (`tasks_runner.rs`) extrai a gaveta, executa claims/busca/navegação e reporta status, mas **não porta** `libs/tasks/{verifier,surprise,dispatcher,search,state}` do oráculo — as tarefas não são creditadas e os status divergem (`Falhou`/`Pendente`). Evidência comparativa em `docs/06-validacao-real.md`.
 
 Escopo: `flows::tasks` (state, verifier, surprise, search, prizeland, dispatcher) e loop de `tasks`.
 
