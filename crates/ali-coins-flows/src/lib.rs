@@ -11,7 +11,10 @@ pub mod desktop;
 pub mod login;
 pub mod navigation;
 pub mod tasks;
+pub mod tasks_dispatcher;
 pub mod tasks_runner;
+pub mod tasks_surprise;
+pub mod tasks_verifier;
 
 /// Versão do crate, herdada do workspace.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

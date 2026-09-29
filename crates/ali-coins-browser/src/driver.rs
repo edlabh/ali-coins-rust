@@ -149,6 +149,30 @@ pub trait Page: Send + Sync {
     /// Clica no primeiro elemento do seletor.
     async fn click_selector(&self, selector: &str) -> Result<(), BrowserError>;
     /// Scrolla a página.
+    /// Toque real (touch) nas coordenadas do viewport (páginas com touch habilitado).
+    async fn tap_at(&self, _x: f64, _y: f64) -> Result<(), BrowserError> {
+        Err(BrowserError::Unsupported(
+            "tap_at não suportado neste driver".to_string(),
+        ))
+    }
+
+    /// Clique real (input do mouse) nas coordenadas do viewport (clique "trusted").
+    async fn click_at(&self, x: f64, y: f64) -> Result<(), BrowserError> {
+        self.click_at_with_modifiers(x, y, 0).await
+    }
+
+    /// Clique real com modificadores (Alt=1, Ctrl=2, Meta=4, Shift=8).
+    async fn click_at_with_modifiers(
+        &self,
+        _x: f64,
+        _y: f64,
+        _modifiers: i64,
+    ) -> Result<(), BrowserError> {
+        Err(BrowserError::Unsupported(
+            "click_at não suportado neste driver".to_string(),
+        ))
+    }
+    /// Rola a página por um deslocamento (px).
     async fn scroll_by(&self, x: i64, y: i64) -> Result<(), BrowserError>;
     /// Captura screenshot.
     async fn screenshot(&self) -> Result<Vec<u8>, BrowserError>;

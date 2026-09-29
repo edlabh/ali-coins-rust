@@ -139,6 +139,17 @@ pub fn run(args: &[String]) -> StdExitCode {
             page.seed_storage_state(&session_data)
                 .await
                 .map_err(|error| error.to_string())?;
+            // Recarrega já com cookies + localStorage semeados: o SPA inicia autenticado
+            // (equivalente ao contexto com storageState do oráculo).
+            let _ = page
+                .goto(
+                    ali_coins_flows::tasks_runner::DESKTOP_COIN_URL,
+                    &ali_coins_browser::driver::NavOptions::default(),
+                )
+                .await;
+            page.seed_storage_state(&session_data)
+                .await
+                .map_err(|error| error.to_string())?;
             if !has_auth_cookies(&*page)
                 .await
                 .map_err(|error| error.to_string())?
@@ -149,15 +160,8 @@ pub fn run(args: &[String]) -> StdExitCode {
             }
 
             let started = Instant::now();
-            let options = TasksOptions {
-                max_actions: u32::try_from(config.task_max_actions).unwrap_or(25),
-                max_attempts: u32::try_from(config.task_max_attempts).unwrap_or(4),
-                scroll_wait: Duration::from_secs(config.scroll_wait_seconds),
-                skip_app_only: config.skip_app_only_tasks,
-                search_query: ali_coins_flows::tasks::SEARCH_QUERY.to_string(),
-                nav_timeout: Duration::from_millis(config.nav_timeout),
-            };
-            let run = run_tasks(&*page, &options)
+            let options = TasksOptions::from_config(&config);
+            let run = run_tasks(&*page, &*browser, &options)
                 .await
                 .map_err(|error| error.to_string())?;
             let duration = ali_coins_core::time::format_duration(
@@ -246,10 +250,14 @@ pub fn run(args: &[String]) -> StdExitCode {
                         timeout_ms: config.telegram_timeout_ms,
                         api_base: String::new(),
                     };
-                    let event = if run.results.is_empty() {
-                        TelegramEvent::AlreadyCollected
-                    } else {
+                    let failed_count = run.real_failures();
+                    let had_actions = run.had_actions();
+                    let event = if had_actions {
                         TelegramEvent::Success
+                    } else if failed_count > 0 {
+                        TelegramEvent::Failure
+                    } else {
+                        TelegramEvent::AlreadyCollected
                     };
                     let message = build_unified_report_message(
                         &payload,
@@ -276,11 +284,20 @@ pub fn run(args: &[String]) -> StdExitCode {
                 }
             }
 
-            if run.results.is_empty() {
+            // Sem ações pode ser "nada pendente" (exit 2) ou falhas reais (exit 1),
+            // como no do_tasks.js standalone (o run_all retenta exit 1).
+            let failed_count = run.real_failures();
+            if run.had_actions() {
+                Ok(ExitCode::Success.as_i32())
+            } else if failed_count > 0 {
+                logging::global().warn(
+                    &format!("Execução sem ações e com {failed_count} falha(s) reais."),
+                    &[],
+                );
+                Ok(ExitCode::Failure.as_i32())
+            } else {
                 logging::global().warn("Nenhuma tarefa encontrada no painel (sem ação).", &[]);
                 Ok(ExitCode::NoAction.as_i32())
-            } else {
-                Ok(ExitCode::Success.as_i32())
             }
         })
         .map_or_else(

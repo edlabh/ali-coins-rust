@@ -86,7 +86,7 @@ Escopo: `flows::login`, `balance`, `checkin` + `ui::navigation` (goto/retry/clos
 
 ## Fase 4 — Tarefas (2–3 semanas)
 
-**Status: pendente (2026-09-29).** O runner atual (`tasks_runner.rs`) extrai a gaveta, executa claims/busca/navegação e reporta status, mas **não porta** `libs/tasks/{verifier,surprise,dispatcher,search,state}` do oráculo — as tarefas não são creditadas e os status divergem (`Falhou`/`Pendente`). Evidência comparativa em `docs/06-validacao-real.md`.
+**Status: motor portado e validado ao vivo (2026-09-29).** `tasks.rs` (máquina de estados), `tasks_verifier.rs` (gaveta/extração), `tasks_dispatcher.rs` (ações/busca/scroll/Prize Land) e `tasks_surprise.rs` (itens surpresa) são ports de `state.js`/`verifier.js`/`dispatcher.js`/`search.js`/`prizeland.js`/`surprise.js`. Validação na VM: **+46 moedas** creditadas (missões 0→46, saldo 996→1042), 6 tarefas `Concluída` e o surprise falhando igual ao oráculo (`sem progresso após 3 tentativas`). Evidências em `docs/06-validacao-real.md`. Pendências: **D-10** (toques do "Browse surprise items" não avançam a rodada — o oráculo falhou igual no mesmo dia) e minigames/quizzes desativados por `SKIP_APP_ONLY_TASKS` (padrão do oráculo).
 
 Escopo: `flows::tasks` (state, verifier, surprise, search, prizeland, dispatcher) e loop de `tasks`.
 

@@ -299,15 +299,8 @@ pub fn run(args: &[String]) -> StdExitCode {
                 let _ = page.seed_storage_state(state).await;
             }
             let tasks_outcome = if has_auth_cookies(&*page).await.unwrap_or(false) {
-                let options = TasksOptions {
-                    max_actions: u32::try_from(config.task_max_actions).unwrap_or(25),
-                    max_attempts: u32::try_from(config.task_max_attempts).unwrap_or(4),
-                    scroll_wait: Duration::from_secs(config.scroll_wait_seconds),
-                    skip_app_only: config.skip_app_only_tasks,
-                    search_query: ali_coins_flows::tasks::SEARCH_QUERY.to_string(),
-                    nav_timeout: Duration::from_millis(config.nav_timeout),
-                };
-                run_tasks(&*page, &options)
+                let options = TasksOptions::from_config(&config);
+                run_tasks(&*page, &*browser, &options)
                     .await
                     .map_err(|error| error.to_string())
             } else {

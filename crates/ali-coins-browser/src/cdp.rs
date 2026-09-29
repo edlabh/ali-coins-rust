@@ -14,6 +14,10 @@ use chromiumoxide::browser::{Browser as CdpBrowser, BrowserConfig};
 use chromiumoxide::cdp::browser_protocol::emulation::{
     SetDeviceMetricsOverrideParams, SetLocaleOverrideParams, SetTouchEmulationEnabledParams,
 };
+use chromiumoxide::cdp::browser_protocol::input::{
+    DispatchMouseEventParams, DispatchMouseEventType, GestureSourceType, MouseButton,
+    SynthesizeTapGestureParams,
+};
 use chromiumoxide::cdp::browser_protocol::page::{
     AddScriptToEvaluateOnNewDocumentParams, NavigateParams,
 };
@@ -303,6 +307,46 @@ impl Page for CdpPageHandle {
         } else {
             Err(BrowserError::NotFound(selector.to_string()))
         }
+    }
+
+    async fn tap_at(&self, x: f64, y: f64) -> Result<(), BrowserError> {
+        let mut tap = SynthesizeTapGestureParams::new(x, y);
+        tap.duration = Some(60);
+        tap.tap_count = Some(1);
+        tap.gesture_source_type = Some(GestureSourceType::Touch);
+        self.page
+            .execute(tap)
+            .await
+            .map_err(|err| BrowserError::Evaluate(err.to_string()))?;
+        Ok(())
+    }
+
+    async fn click_at_with_modifiers(
+        &self,
+        x: f64,
+        y: f64,
+        modifiers: i64,
+    ) -> Result<(), BrowserError> {
+        let mut press = DispatchMouseEventParams::new(DispatchMouseEventType::MousePressed, x, y);
+        press.button = Some(MouseButton::Left);
+        press.buttons = Some(1);
+        press.click_count = Some(1);
+        press.modifiers = Some(modifiers);
+        self.page
+            .execute(press)
+            .await
+            .map_err(|err| BrowserError::Evaluate(err.to_string()))?;
+        let mut release =
+            DispatchMouseEventParams::new(DispatchMouseEventType::MouseReleased, x, y);
+        release.button = Some(MouseButton::Left);
+        release.buttons = Some(0);
+        release.click_count = Some(1);
+        release.modifiers = Some(modifiers);
+        self.page
+            .execute(release)
+            .await
+            .map_err(|err| BrowserError::Evaluate(err.to_string()))?;
+        Ok(())
     }
 
     async fn scroll_by(&self, x: i64, y: i64) -> Result<(), BrowserError> {
