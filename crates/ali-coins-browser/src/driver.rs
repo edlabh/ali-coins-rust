@@ -161,6 +161,27 @@ pub trait Page: Send + Sync {
         self.click_at_with_modifiers(x, y, 0).await
     }
 
+    /// Move o mouse para as coordenadas (`drag=true` mantém o botão pressionado).
+    async fn mouse_move(&self, _x: f64, _y: f64, _drag: bool) -> Result<(), BrowserError> {
+        Err(BrowserError::Unsupported(
+            "mouse_move não suportado neste driver".to_string(),
+        ))
+    }
+
+    /// Pressiona o botão esquerdo nas coordenadas.
+    async fn mouse_down(&self, _x: f64, _y: f64) -> Result<(), BrowserError> {
+        Err(BrowserError::Unsupported(
+            "mouse_down não suportado neste driver".to_string(),
+        ))
+    }
+
+    /// Solta o botão esquerdo nas coordenadas.
+    async fn mouse_up(&self, _x: f64, _y: f64) -> Result<(), BrowserError> {
+        Err(BrowserError::Unsupported(
+            "mouse_up não suportado neste driver".to_string(),
+        ))
+    }
+
     /// Clique real com modificadores (Alt=1, Ctrl=2, Meta=4, Shift=8).
     async fn click_at_with_modifiers(
         &self,

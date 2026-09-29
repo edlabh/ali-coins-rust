@@ -67,7 +67,7 @@ Escopo: `browser::cdp` (launch/cascata de args, sanitização de env, low-memory
 
 ## Fase 3 — Check-in (1,5–2 semanas)
 
-**Status: concluída com validação real (2026-09-28).** Parsers, login (SPA in-page com botão visível), orquestração do `checkin` e CLI validados contra o AliExpress real: run 1 coletou o check-in (exit 0) e run 2 confirmou `alreadyCollected` (exit 2). Evidências em `docs/06-validacao-real.md`. Pendências finas: releitura de confirmação de quebra do streak (D-08) e slider (D-07); pré-checagem/reuso/sync/água e `resolveStreakDays` **concluídos em 29/09**.
+**Status: concluída com validação real (2026-09-28).** Parsers, login (SPA in-page com botão visível), orquestração do `checkin` e CLI validados contra o AliExpress real: run 1 coletou o check-in (exit 0) e run 2 confirmou `alreadyCollected` (exit 2). Evidências em `docs/06-validacao-real.md`. Pendência fina: releitura de confirmação de quebra do streak (D-08); pré-checagem/reuso/sync/água, `resolveStreakDays` (D-08) e slider/seletores `:has-text` (D-07) **concluídos em 29/09**.
 
 Escopo: `flows::login`, `balance`, `checkin` + `ui::navigation` (goto/retry/closeModals/slider).
 

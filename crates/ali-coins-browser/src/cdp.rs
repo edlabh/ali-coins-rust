@@ -321,6 +321,40 @@ impl Page for CdpPageHandle {
         Ok(())
     }
 
+    async fn mouse_move(&self, x: f64, y: f64, drag: bool) -> Result<(), BrowserError> {
+        let mut event = DispatchMouseEventParams::new(DispatchMouseEventType::MouseMoved, x, y);
+        event.buttons = Some(i64::from(drag));
+        self.page
+            .execute(event)
+            .await
+            .map_err(|err| BrowserError::Evaluate(err.to_string()))?;
+        Ok(())
+    }
+
+    async fn mouse_down(&self, x: f64, y: f64) -> Result<(), BrowserError> {
+        let mut event = DispatchMouseEventParams::new(DispatchMouseEventType::MousePressed, x, y);
+        event.button = Some(MouseButton::Left);
+        event.buttons = Some(1);
+        event.click_count = Some(1);
+        self.page
+            .execute(event)
+            .await
+            .map_err(|err| BrowserError::Evaluate(err.to_string()))?;
+        Ok(())
+    }
+
+    async fn mouse_up(&self, x: f64, y: f64) -> Result<(), BrowserError> {
+        let mut event = DispatchMouseEventParams::new(DispatchMouseEventType::MouseReleased, x, y);
+        event.button = Some(MouseButton::Left);
+        event.buttons = Some(0);
+        event.click_count = Some(1);
+        self.page
+            .execute(event)
+            .await
+            .map_err(|err| BrowserError::Evaluate(err.to_string()))?;
+        Ok(())
+    }
+
     async fn click_at_with_modifiers(
         &self,
         x: f64,
