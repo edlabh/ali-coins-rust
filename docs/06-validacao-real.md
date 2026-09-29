@@ -230,3 +230,18 @@ Validação ao vivo (`checkin` avulso e `all` na VM):
 - `all --json` → etapas `1m 13s` (check-in) e `7m 35s` (tarefas);
   `meta`: `checkinCoinsGained=15`, `tasksCoinsGained=46`,
   `totalCoinsGained=61`, `finalBalance="1042 moedas"`; notificação única enviada.
+
+## D-06/D-07 — `close_modals` exato e slider humanizado (2026-09-29)
+
+- `close_modals` porta a lista exata do oráculo (CSS + `:has-text`), com filtro
+  de diálogo/overlay e um único round-trip CDP para os seletores CSS.
+- `login` ganhou o **slider humanizado** (`trySolveSlider`: easing quadrático,
+  jitter vertical, 25 frames com pausas de 10–19 ms, verificação por `detached`)
+  com primitivas de mouse reais no driver (`mouse_move/down/up`) e recebeu os
+  seletores `:has-text` completos (Continue/Continuar/Sign in/Entrar), com as
+  4 chamadas do oráculo no fluxo.
+- Testes: `slider_trajectory` (easing/jitter/monotonicidade) e
+  `split_has_text`; 45 testes do crate de fluxos verdes.
+- Regressão ao vivo (`all` na VM): 6 tarefas `Concluída`, surprise ainda
+  `Falhou (sem progresso…)` (D-10 parado), `meta` idêntico
+  (`+61 moedas`, saldo `1042`) e duração total `6m 45s`.
