@@ -123,9 +123,50 @@ de verdade** para o relatório e a notificação:
 - Fluxos cobertos: `checkin` (leitura pós-check-in), `all` (pós-check-in e
   pós-tarefas) e `tasks` (saldo final + missões).
 
-Lacuna remanescente (Fase 4): a **execução das tarefas** continua conservadora
-— o runner não porta `libs/tasks/{verifier,surprise,dispatcher,search,state}`
-do oráculo, então as tarefas não são creditadas (`missões=0`, status
-`Falhou/Pendente`). Evidência comparativa no mesmo dia: o oráculo (conta
-`ag***`) completou 7 de 8 tarefas visíveis (`+51 moedas`), incluindo busca,
-super discounts (3 rodadas), coupons e sponsored items.
+## Motor de tarefas portado — execução ao vivo (2026-09-29, 12:27–12:36 UTC)
+
+Port de `libs/tasks/{state,verifier,dispatcher,search,prizeland,surprise}.js`
+e do laço de `do_tasks.js` (`tasks.rs`, `tasks_verifier.rs`,
+`tasks_dispatcher.rs`, `tasks_surprise.rs`, `tasks_runner.rs`). Execução
+`all` na VM (Docker), conta `edelanoali@gmail.com`:
+
+| Tarefa | Resultado Rust | Resultado oráculo (conta `ag***`, mesmo dia) |
+|---|---|---|
+| Explore sponsored items | `Concluída (2/2)` | `Concluída (2/2)` |
+| Browse recently viewed items | `Concluída` | `Concluída` |
+| View your "Coins Savings Recap" | `Concluída` | `Concluída` |
+| View Super discounts | `Concluída (3/3)` | `Concluída (3/3)` |
+| Search for what you love | `Concluída` | `Concluída` |
+| Coupons & shopping credits | `Concluída` | `Concluída` |
+| Browse surprise items | `Falhou (sem progresso após 3 tentativas)` | `Falhou (sem progresso após 3 tentativas)` |
+| Items $0.1 / Merge Boss / Daily quiz | `Desativada (SKIP_APP_ONLY_TASKS)` | `Desativada (SKIP_APP_ONLY_TASKS)` |
+
+- **Moedas**: missões do extrato `0 → 46`; saldo `996 → 1042`;
+  `meta.tasksCoinsGained=46`, `totalCoinsGained=61` (check-in +15).
+- **Exit 0**; etapas `1m 34s` (check-in) e `8m 21s` (tarefas).
+- Uma única notificação Telegram com `🪙 +61 moedas (check-in +15 / tarefas +46)`
+  e `💰 Saldo: 1042 moedas`.
+- Divergência residual: a tarefa "Daily check-in" não apareceu na extração
+  final (na execução anterior aparecia); investigar na próxima janela.
+
+### Investigação da tarefa "Browse surprise items" (tarde de 2026-09-29)
+
+A tarefa passou a ser **executada**: o feed é a grade de produtos da própria
+página de moedas (`.feeds-discount-card`), com 18–19 cards visíveis; o fluxo
+passou a:
+
+- filtrar apenas cards com retângulo válido (o feed é virtualizado,
+  `inscene-outside`);
+- tocar o overlay `.product-click` com **toque real** de touch
+  (`Input.synthesizeTapGesture`), 3s por card, e com fallback de mouse/JS;
+- detectar/reabrir o feed quando o toque abre o detalhe (mesma aba) e fechar
+  abas novas, com tetos de tempo por operação CDP.
+
+Mesmo assim o contador de rodadas do card (`0/2`) **não avança** — e o
+oráculo Node falhou a mesma tarefa no mesmo dia com status idêntico
+(`Falhou (sem progresso após 3 tentativas)`). Evidências: logs de
+`Feed de surpresas: cards=19` seguidos de toques reais sem
+`avançou de rodada`, e screenshots `scratch/surprise-{feed,after-tap}.png`
+(gaveta aberta com "Tap 3 items on this page to earn 5 coins", `0/2`).
+Registrado como D-10 com hipóteses de investigação (exigir abertura do
+detalhe/beacon, clique trusted no GO, feed dedicado).
