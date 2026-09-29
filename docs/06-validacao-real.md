@@ -195,3 +195,21 @@ para identificar a chamada que o site espera nessa tarefa (a contabilização
 parece server-side), ou uma execução do oráculo em dia em que ele conclua a
 tarefa para comparar os requests. Observação: o oráculo vem falhando nessa
 tarefa nos últimos dias — pode ser mudança do site, não do port.
+
+**Decisão (29/09): aguardar o oráculo voltar a concluir a tarefa antes de
+novos experimentos.**
+
+## Atraso inicial e `--dry-run` pós-subcomando (2026-09-29)
+
+Paridade com `all.js`/`config.js`:
+
+- `START_DELAY_MIN_MS`/`START_DELAY_MAX_MS` (0/0 = desligado) agora são
+  aplicados no comando `all`, **antes do lock/navegador**, com a mesma janela
+  aleatória e a mesma mensagem do oráculo; `--no-delay` pula (manuais e
+  retentativas do `run_all.sh`) e `--dry-run` nunca atrasa.
+- `all --dry-run [--json]` (e `checkin`/`tasks --dry-run`) agora executam o
+  dry-run global em vez do fluxo real — mesmo contrato do healthcheck do
+  Docker do oráculo.
+- Validação na VM: `all --dry-run --json` → exit 0 com `dryRun: true`;
+  janela fixa de 15s → `Início atrasado em 15s (janela 15–15s; início previsto
+  às 11:13:16 PDT)`; com `--no-delay` a mensagem não aparece.

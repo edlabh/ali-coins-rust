@@ -41,6 +41,19 @@ fn flag_value<'a>(args: &'a [String], name: &str) -> Option<&'a str> {
         .map(String::as_str)
 }
 
+/// O atraso inicial deve ser aplicado? (paridade `shouldApplyStartDelay` do oráculo)
+fn should_apply_start_delay(no_delay: bool, max_ms: u64) -> bool {
+    !no_delay && max_ms > 0
+}
+
+/// Fração aleatória simples (nanossegundos do relógio).
+fn random_fraction() -> f64 {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |duration| duration.subsec_nanos());
+    f64::from(nanos) / 1_000_000_000.0
+}
+
 /// Rótulo de host exibido nas notificações (`NOTIFY_HOST_LABEL` > hostname).
 fn notify_host(config: &ali_coins_core::config::Config) -> String {
     if config.notify_host_label.trim().is_empty() {
@@ -139,6 +152,33 @@ pub fn run(args: &[String]) -> StdExitCode {
     } else {
         &accounts[0]
     };
+
+    // Atraso inicial aleatório (anti-detecção; paridade `all.js`): fica ANTES do
+    // lock/navegador, nunca roda com `--no-delay` e é desligado com teto 0.
+    if should_apply_start_delay(has_flag(args, "--no-delay"), config.start_delay_max_ms) {
+        #[allow(clippy::cast_precision_loss)]
+        let delay_ms = ali_coins_core::time::pick_pause_ms(
+            config.start_delay_min_ms as f64,
+            config.start_delay_max_ms as f64,
+            random_fraction(),
+        );
+        if delay_ms > 0 {
+            let target = chrono::Utc::now()
+                + chrono::Duration::milliseconds(i64::try_from(delay_ms).unwrap_or(i64::MAX));
+            logging::global().info(
+                &format!(
+                    "Início atrasado em {}s (janela {}–{}s; início previsto às {} {})",
+                    delay_ms / 1000,
+                    config.start_delay_min_ms / 1000,
+                    config.start_delay_max_ms / 1000,
+                    ali_coins_core::time::format_time(target),
+                    ali_coins_core::time::get_report_timezone_label(target)
+                ),
+                &[],
+            );
+            std::thread::sleep(Duration::from_millis(delay_ms));
+        }
+    }
 
     let lock_options = LockOptions {
         path: account.lock_path.clone(),
@@ -512,4 +552,16 @@ pub fn run(args: &[String]) -> StdExitCode {
             },
             |code| StdExitCode::from(u8::try_from(code).unwrap_or(1)),
         )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::should_apply_start_delay;
+
+    #[test]
+    fn atraso_inicial_so_com_max_positivo_e_sem_no_delay() {
+        assert!(!should_apply_start_delay(false, 0));
+        assert!(!should_apply_start_delay(true, 5000));
+        assert!(should_apply_start_delay(false, 5000));
+    }
 }

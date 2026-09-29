@@ -72,10 +72,25 @@ fn main() -> ExitCode {
     match raw.get(1).map(String::as_str) {
         Some("export-session") => return export_import::run_export(&raw[2..]),
         Some("import-session") => return export_import::run_import(&raw[2..]),
-        Some("all") => return run_all::run(&raw[2..]),
-        Some("checkin") => return run_checkin::run(&raw[2..]),
+        Some("all") => {
+            if raw.iter().any(|arg| arg == "--dry-run") {
+                return run_dry_run(&raw, raw.iter().any(|arg| arg == "--json"));
+            }
+            return run_all::run(&raw[2..]);
+        }
+        Some("checkin") => {
+            if raw.iter().any(|arg| arg == "--dry-run") {
+                return run_dry_run(&raw, raw.iter().any(|arg| arg == "--json"));
+            }
+            return run_checkin::run(&raw[2..]);
+        }
         Some("notify-test") => return notify_test::run(&raw[2..]),
-        Some("tasks") => return run_tasks::run(&raw[2..]),
+        Some("tasks") => {
+            if raw.iter().any(|arg| arg == "--dry-run") {
+                return run_dry_run(&raw, raw.iter().any(|arg| arg == "--json"));
+            }
+            return run_tasks::run(&raw[2..]);
+        }
         _ => {}
     }
 
@@ -93,6 +108,11 @@ fn main() -> ExitCode {
         return ExitCode::from(1);
     }
 
+    run_dry_run(&raw, json_mode)
+}
+
+/// `--dry-run [--json]` (também aceito após subcomandos: `all --dry-run`).
+pub(crate) fn run_dry_run(raw: &[String], json_mode: bool) -> ExitCode {
     let base_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     // Mesma ordem do oráculo: credentials.env (sem sobrescrever env já definidas).
     let credentials = base_dir.join("credentials.env");
@@ -101,8 +121,8 @@ fn main() -> ExitCode {
     }
     let env = EnvSource::from_current_process();
 
-    let notify = last_boolean_flag(&raw, "--notify", "--no-notify");
-    let heartbeat = last_boolean_flag(&raw, "--heartbeat", "--no-heartbeat");
+    let notify = last_boolean_flag(raw, "--notify", "--no-notify");
+    let heartbeat = last_boolean_flag(raw, "--heartbeat", "--no-heartbeat");
 
     let config = match Config::load(&env, &base_dir, true, notify, heartbeat) {
         Ok(config) => config,
@@ -124,7 +144,7 @@ fn main() -> ExitCode {
 
     let accounts = load_accounts(&env, &base_dir);
 
-    if matches.get_flag("json") {
+    if json_mode {
         println!(
             "{}",
             DryRunSummary::build(&config, &accounts).to_pretty_json()

@@ -44,7 +44,7 @@ ali-coins tasks              # apenas o painel "Ganhe mais moedas"
 | Comando | Descrição |
 |---|---|
 | `ali-coins --dry-run [--json]` | Valida configuração sem navegador |
-| `ali-coins all [--json] [--force] [--account <id>]` | Check-in + tarefas numa execução (relatório e notificação únicos) |
+| `ali-coins all [--json] [--force] [--account <id>] [--no-delay]` | Check-in + tarefas numa execução (relatório e notificação únicos) |
 | `ali-coins checkin [--json] [--force] [--account <id>]` | Check-in diário |
 | `ali-coins tasks [--json] [--force]` | Tarefas diárias |
 | `ali-coins notify-test` | Envia uma mensagem de teste no Telegram |
