@@ -14,7 +14,7 @@ use ali_coins_core::notify::{
     build_unified_report_message, send_telegram,
 };
 use ali_coins_core::report::{
-    CheckinInput, StreakValue, UnifiedMeta, build_unified_report_payload, checkin_coins_from_streak,
+    CheckinInput, UnifiedMeta, build_unified_report_payload, checkin_coins_from_streak,
 };
 use ali_coins_core::session::{SessionOptions, load_session_files, save_session, validate_session};
 use ali_coins_core::{exit::ExitCode, logging};
@@ -104,7 +104,12 @@ pub fn run(args: &[String]) -> StdExitCode {
 
             // Sessão existente (se válida, evita login).
             let mut storage_state = None;
+            let mut previous_streak_days = None;
             if let Ok(loaded) = load_session_files(&session_options, &base_dir, &env) {
+                previous_streak_days = loaded
+                    .meta_data
+                    .as_ref()
+                    .and_then(|meta| meta.last_streak_days);
                 if let Some(session_data) = &loaded.session_data {
                     if validate_session(
                         session_data,
@@ -154,6 +159,14 @@ pub fn run(args: &[String]) -> StdExitCode {
                 let _ = page.seed_storage_state(state).await;
             }
 
+            // Pré-checagem desktop (D-08): saldo/streak/extrato antes do mobile.
+            let early_desktop = crate::checkin_parity::read_early_desktop(
+                &*browser,
+                storage_state.as_ref(),
+                Duration::from_millis(config.nav_timeout_short),
+            )
+            .await;
+
             let element_timeout = Duration::from_millis(config.element_timeout);
             let selector_timeout = Duration::from_millis(config.selector_timeout);
             let checkin_options = CheckinOptions {
@@ -175,11 +188,79 @@ pub fn run(args: &[String]) -> StdExitCode {
                 i64::try_from(step_started.elapsed().as_millis()).unwrap_or(i64::MAX),
             );
 
+            let just_collected = result.collected;
+
+            // Coleta de água da Fazenda Mágica (trecho do collect.js).
+            let _ = crate::checkin_parity::collect_water(&*page).await;
+
+            // 5. Confirmar resultado e saldo no desktop (reusa a checagem inicial
+            // quando nada foi coletado, como o oráculo).
+            let desktop = if crate::checkin_parity::should_reuse_early_desktop(
+                just_collected,
+                early_desktop.as_ref(),
+            ) {
+                logging::global().info(
+                    "Saldo/streak reutilizados da checagem inicial do desktop (sem nova leitura).",
+                    &[],
+                );
+                early_desktop.clone()
+            } else {
+                let state = page.storage_state().await.ok();
+                crate::checkin_parity::read_early_desktop(
+                    &*browser,
+                    state.as_ref(),
+                    Duration::from_millis(config.nav_timeout_short),
+                )
+                .await
+            };
+            let was_already_collected_today =
+                desktop.as_ref().is_some_and(|data| data.has_checkin_today);
+            let bonus_from_ledger = desktop.as_ref().and_then(|data| data.today_bonus_coins);
+            let checkin_coins_from_ledger = bonus_from_ledger.is_some_and(|value| value > 0);
+            let already_collected =
+                (result.already_collected || was_already_collected_today) && !just_collected;
+            let confirmed_by_ledger = crate::checkin_parity::should_confirm_checkin_by_ledger(
+                just_collected,
+                already_collected,
+                checkin_coins_from_ledger,
+            );
+            let resolved = crate::checkin_parity::resolve_streak(
+                result.streak_days,
+                previous_streak_days,
+                early_desktop.as_ref().and_then(|data| data.desktop_streak),
+                just_collected,
+                already_collected,
+                confirmed_by_ledger,
+                desktop.as_ref().and_then(|data| data.desktop_streak),
+            );
+            let streak_days = crate::checkin_parity::resolved_streak_number(&resolved);
+            let streak_value = resolved.streak_days.clone();
+            let coins = if let Some(bonus) = bonus_from_ledger {
+                Some(bonus)
+            } else if !already_collected && (just_collected || confirmed_by_ledger) {
+                Some(checkin_coins_from_streak(Some(&streak_value)))
+            } else {
+                None
+            };
+            let raw_balance = desktop
+                .as_ref()
+                .and_then(|data| data.total_balance.clone())
+                .or_else(|| result.total_balance.clone());
+            let total_balance = crate::checkin_parity::sync_balance_after_checkin(
+                just_collected,
+                coins,
+                raw_balance.as_deref(),
+                early_desktop
+                    .as_ref()
+                    .and_then(|data| data.total_balance.as_deref()),
+            )
+            .or(raw_balance);
+
             // Persiste a sessão renovada (cookies + localStorage filtrado).
             let final_state = page.storage_state().await.ok();
             if let Some(state) = &final_state {
                 let mut save_options = session_options.clone();
-                save_options.streak_days = result.streak_days;
+                save_options.streak_days = streak_days;
                 if save_session(&save_options, &base_dir, &env, state.clone(), &account.user)
                     .is_ok()
                 {
@@ -187,35 +268,9 @@ pub fn run(args: &[String]) -> StdExitCode {
                 }
             }
 
-            // Saldo/streak/extrato do dia no desktop (fonte de verdade do oráculo).
-            let desktop = ali_coins_flows::desktop::read_desktop_report(
-                &*browser,
-                final_state.as_ref(),
-                Duration::from_millis(config.nav_timeout_short),
-            )
-            .await;
-            let bonus_from_ledger = desktop.as_ref().and_then(|data| data.today_bonus_coins);
-            let checkin_coins_from_ledger = bonus_from_ledger.is_some_and(|value| value > 0);
-            let streak_days = result
-                .streak_days
-                .or_else(|| desktop.as_ref().and_then(|data| data.desktop_streak));
-            let total_balance = desktop
-                .as_ref()
-                .and_then(|data| data.total_balance.clone())
-                .or_else(|| result.total_balance.clone());
-
             // Relatório unificado (C-09).
-            let streak_value = streak_days
-                .map_or_else(|| StreakValue::Text("N/D".to_string()), StreakValue::Number);
-            let coins = if let Some(bonus) = bonus_from_ledger {
-                Some(bonus)
-            } else if !result.already_collected && result.collected {
-                Some(checkin_coins_from_streak(Some(&streak_value)))
-            } else {
-                None
-            };
             let checkin = CheckinInput {
-                already_collected: Some(result.already_collected),
+                already_collected: Some(already_collected),
                 coins_gained_today: coins.map(|value| value.to_string()),
                 streak_days: Some(streak_value),
                 total_balance: total_balance.clone(),
@@ -242,9 +297,9 @@ pub fn run(args: &[String]) -> StdExitCode {
                 logging::global().info(
                     &format!(
                         "Check-in: {} | streak {} | saldo {}",
-                        if result.collected || checkin_coins_from_ledger {
+                        if just_collected || checkin_coins_from_ledger || confirmed_by_ledger {
                             "coletado"
-                        } else if result.already_collected {
+                        } else if already_collected {
                             "já coletado"
                         } else {
                             "não coletado"
@@ -260,13 +315,14 @@ pub fn run(args: &[String]) -> StdExitCode {
             if config.telegram_enabled {
                 let timeout = Duration::from_millis(config.telegram_timeout_ms);
                 if let Ok(client) = SafeHttpClient::new(config.allow_private_webhooks, timeout) {
-                    let event = if result.collected || checkin_coins_from_ledger {
-                        TelegramEvent::Success
-                    } else if result.already_collected {
-                        TelegramEvent::AlreadyCollected
-                    } else {
-                        TelegramEvent::Failure
-                    };
+                    let event =
+                        if just_collected || checkin_coins_from_ledger || confirmed_by_ledger {
+                            TelegramEvent::Success
+                        } else if already_collected {
+                            TelegramEvent::AlreadyCollected
+                        } else {
+                            TelegramEvent::Failure
+                        };
                     let streak_display =
                         streak_days.map_or_else(|| "N/D".to_string(), |value| value.to_string());
                     let host = notify_host(&config);
@@ -323,9 +379,9 @@ pub fn run(args: &[String]) -> StdExitCode {
                 }
             }
 
-            if result.collected || checkin_coins_from_ledger {
+            if just_collected || checkin_coins_from_ledger || confirmed_by_ledger {
                 Ok(ExitCode::Success.as_i32())
-            } else if result.already_collected {
+            } else if already_collected {
                 Ok(ExitCode::NoAction.as_i32())
             } else {
                 Ok(ExitCode::Failure.as_i32())

@@ -213,3 +213,20 @@ Paridade com `all.js`/`config.js`:
 - Validação na VM: `all --dry-run --json` → exit 0 com `dryRun: true`;
   janela fixa de 15s → `Início atrasado em 15s (janela 15–15s; início previsto
   às 11:13:16 PDT)`; com `--no-delay` a mensagem não aparece.
+
+## Paridade fina do check-in (D-08) — concluída (2026-09-29)
+
+Port de `collect.js`: pré-checagem desktop antes do mobile, reuso da leitura
+quando nada foi coletado (`shouldReuseEarlyDesktop`), coleta de água, sincronização
+do saldo quando o ledger atrasa e `resolveStreakDays` (móvel + meta anterior +
+early desktop + extrato + confirmação por ledger).
+
+Validação ao vivo (`checkin` avulso e `all` na VM):
+
+- `checkin --json` → `Extrato desktop: saldo=1042 bônus=15 missões=46 streak=2`
+  (pré-checagem), **"Saldo/streak reutilizados da checagem inicial do desktop"**
+  e relatório `alreadyCollected=true`, `coinsGainedToday=15`, `streakDays=2`,
+  `totalBalance=1042` (exit 0 pelo crédito do dia no extrato).
+- `all --json` → etapas `1m 13s` (check-in) e `7m 35s` (tarefas);
+  `meta`: `checkinCoinsGained=15`, `tasksCoinsGained=46`,
+  `totalCoinsGained=61`, `finalBalance="1042 moedas"`; notificação única enviada.
