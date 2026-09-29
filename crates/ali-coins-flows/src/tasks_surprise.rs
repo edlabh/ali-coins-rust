@@ -39,7 +39,7 @@ where
 }
 
 /// Diagnóstico opt-in (`ALI_COINS_SURPRISE_DEBUG=1`): screenshot + card HTML.
-async fn save_debug(page: &dyn Page, name: &str) {
+pub(crate) async fn save_debug(page: &dyn Page, name: &str) {
     if std::env::var("ALI_COINS_SURPRISE_DEBUG").ok().as_deref() != Some("1") {
         return;
     }
@@ -51,8 +51,8 @@ async fn save_debug(page: &dyn Page, name: &str) {
             &bytes,
         );
     }
-    let script = "(() => { const el = document.querySelector('.feeds-discount-card'); \
-                  return el ? el.outerHTML.slice(0, 3000) : ''; })()";
+    let script = "(() => { const el = document.querySelector('.e2e_task') || document.querySelector('.feeds-discount-card'); \
+                  return el ? el.outerHTML.slice(0, 5000) : ''; })()";
     if let Some(html) = with_timeout(3000, page.eval_raw(script)).await {
         if let Some(html) = html.as_str() {
             let _ = ali_coins_core::secure_fs::safe_write_file(

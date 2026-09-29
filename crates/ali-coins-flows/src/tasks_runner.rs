@@ -464,10 +464,59 @@ pub async fn run_tasks(
                 close_orphan_pages(browser, &url).await;
             }
             let known_urls = open_page_urls(browser).await;
-            if !click_task_button(page, &pending.title).await {
+            let clicked = if pending.is_claimable {
+                click_task_button(page, &pending.title).await
+            } else {
+                // Ações GO/IR usam clique trusted (handlers do site podem exigir input real).
+                crate::tasks_verifier::click_task_button_trusted(page, &pending.title).await
+            };
+            if !clicked {
                 continue;
             }
             actions += 1;
+
+            // Diagnóstico da tarefa de surpresa: gaveta fechou? cards visíveis?
+            let pending_text = format!("{} {}", pending.title, pending.desc).to_lowercase();
+            let is_surprise = ["surprise", "surpresa", "tap 3", "toque em 3"]
+                .iter()
+                .any(|needle| pending_text.contains(needle));
+            if is_surprise {
+                tokio::time::sleep(Duration::from_millis(1500)).await;
+                let drawer = crate::tasks_verifier::drawer_open(page).await;
+                let cards = bounded(
+                    3000,
+                    page.eval_raw("document.querySelectorAll('.feeds-discount-card').length"),
+                )
+                .await
+                .and_then(|value| value.as_u64())
+                .unwrap_or(0);
+                let url = bounded(2000, page.url()).await.unwrap_or_default();
+                ali_coins_core::logging::global().info(
+                    &format!("Pós-GO da surpresa: gaveta_aberta={drawer} cards={cards} url={url}"),
+                    &[],
+                );
+                crate::tasks_surprise::save_debug(page, "surprise-after-go").await;
+                let closed = crate::tasks_verifier::close_task_drawer(page).await;
+                let hit = bounded(
+                    3000,
+                    page.eval_raw(
+                        "(() => { const el = document.querySelector('.feeds-discount-card'); \
+                         if (!el) return ''; if (el.scrollIntoView) el.scrollIntoView({ block: 'center' }); \
+                         const r = el.getBoundingClientRect(); \
+                         const target = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); \
+                         return target ? (target.className || target.tagName) : ''; })()",
+                    ),
+                )
+                .await
+                .and_then(|value| value.as_str().map(str::to_string))
+                .unwrap_or_default();
+                ali_coins_core::logging::global().info(
+                    &format!(
+                        "Gaveta fechada para os toques: {closed} | elemento no centro do card: {hit}"
+                    ),
+                    &[],
+                );
+            }
 
             // Caso 1: resgate/coleta.
             if pending.is_claimable {

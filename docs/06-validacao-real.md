@@ -164,9 +164,19 @@ passou a:
 
 Mesmo assim o contador de rodadas do card (`0/2`) **não avança** — e o
 oráculo Node falhou a mesma tarefa no mesmo dia com status idêntico
-(`Falhou (sem progresso após 3 tentativas)`). Evidências: logs de
-`Feed de surpresas: cards=19` seguidos de toques reais sem
-`avançou de rodada`, e screenshots `scratch/surprise-{feed,after-tap}.png`
-(gaveta aberta com "Tap 3 items on this page to earn 5 coins", `0/2`).
-Registrado como D-10 com hipóteses de investigação (exigir abertura do
-detalhe/beacon, clique trusted no GO, feed dedicado).
+(`Falhou (sem progresso após 3 tentativas)`).
+
+Rodadas seguintes de investigação (29/09, tarde):
+
+- Clique **trusted** no GO (mouse real) — a gaveta continua aberta
+  (`Pós-GO: gaveta_aberta=true`) e o conteúdo dela entra em **loading**.
+- Fechamento explícito da gaveta (elemento de fechar/ESC/canto do painel +
+  neutralização do overlay) passou a funcionar: `Gaveta fechada: true |
+  elemento no centro do card: product-click` — ou seja, os toques agora
+  alcançam o overlay do card.
+- Ainda assim, 3–4 toques touch reais em cards distintos e visíveis não movem
+  o contador `0/2`. Evidências: logs `Feed de surpresas: cards=19` + toques
+  sem `avançou de rodada`; screenshot `scratch/surprise-after-tap.png`.
+- Hipóteses em aberto (D-10): aguardar o fim do loading da gaveta pós-GO antes
+  de tocar; exigir abertura do detalhe do item (beacon no carregamento); ou um
+  feed dedicado aberto pelo GO que o `find_changed_page` esteja ignorando.
