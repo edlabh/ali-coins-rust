@@ -178,44 +178,43 @@ async fn click_card(page: &dyn Page, data_id: &str) -> bool {
          const r = target.getBoundingClientRect(); \
          return JSON.stringify({{ x: r.left + r.width / 2, y: r.top + r.height / 2 }}); }})()"
     );
-    if let Some(value) = with_timeout(3000, page.eval_raw(&rect_script)).await {
-        if let Some(text) = value.as_str() {
-            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(text) {
-                let x = parsed
-                    .get("x")
-                    .and_then(serde_json::Value::as_f64)
-                    .unwrap_or(-1.0);
-                let y = parsed
-                    .get("y")
-                    .and_then(serde_json::Value::as_f64)
-                    .unwrap_or(-1.0);
-                match tokio::time::timeout(Duration::from_millis(6000), page.tap_at(x, y)).await {
-                    Ok(Ok(())) => {
-                        ali_coins_core::logging::global().info(
-                            &format!("Toque (touch) no card {data_id} ({x:.0},{y:.0})."),
-                            &[],
-                        );
-                        return true;
-                    }
-                    Ok(Err(error)) => {
-                        ali_coins_core::logging::global()
-                            .warn(&format!("Touch no card {data_id} falhou: {error}"), &[]);
-                    }
-                    Err(_) => {
-                        ali_coins_core::logging::global().warn(
-                            &format!("Touch no card {data_id} excedeu o tempo limite."),
-                            &[],
-                        );
-                    }
-                }
-                if x >= 0.0 && y >= 0.0 && with_timeout(6000, page.click_at(x, y)).await.is_some() {
-                    ali_coins_core::logging::global().info(
-                        &format!("Toque real (mouse) no card {data_id} ({x:.0},{y:.0})."),
-                        &[],
-                    );
-                    return true;
-                }
-            }
+    let Some(text) = with_timeout(3000, page.eval_raw(&rect_script))
+        .await
+        .and_then(|value| value.as_str().map(str::to_string))
+    else {
+        return false;
+    };
+    let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&text) else {
+        return false;
+    };
+    let x = parsed
+        .get("x")
+        .and_then(serde_json::Value::as_f64)
+        .unwrap_or(-1.0);
+    let y = parsed
+        .get("y")
+        .and_then(serde_json::Value::as_f64)
+        .unwrap_or(-1.0);
+    if x < 0.0 || y < 0.0 {
+        return false;
+    }
+
+    // Experimento (D-10): `mouse` prioriza o clique que abre o detalhe do item.
+    let prefer_mouse = std::env::var("ALI_COINS_SURPRISE_CLICK")
+        .is_ok_and(|value| value.eq_ignore_ascii_case("mouse"));
+    if prefer_mouse {
+        if try_mouse(page, data_id, x, y).await {
+            return true;
+        }
+        if try_touch(page, data_id, x, y).await {
+            return true;
+        }
+    } else {
+        if try_touch(page, data_id, x, y).await {
+            return true;
+        }
+        if try_mouse(page, data_id, x, y).await {
+            return true;
         }
     }
 
@@ -223,17 +222,55 @@ async fn click_card(page: &dyn Page, data_id: &str) -> bool {
         "(() => {{ const el = document.getElementById({id_json}); if (!el) return false; \
          const target = el.querySelector('.product-click') || el; target.click(); return true; }})()"
     );
-    let clicked = with_timeout(4000, page.eval_raw(&script))
+    let fallback = with_timeout(4000, page.eval_raw(&script))
         .await
         .and_then(|value| value.as_bool())
         .unwrap_or(false);
-    if clicked {
+    if fallback {
         ali_coins_core::logging::global().warn(
             &format!("Toque JS (fallback) no card {data_id} — sem clique real disponível."),
             &[],
         );
     }
-    clicked
+    fallback
+}
+
+/// Toque touch real no card.
+async fn try_touch(page: &dyn Page, data_id: &str, x: f64, y: f64) -> bool {
+    match tokio::time::timeout(Duration::from_millis(6000), page.tap_at(x, y)).await {
+        Ok(Ok(())) => {
+            ali_coins_core::logging::global().info(
+                &format!("Toque (touch) no card {data_id} ({x:.0},{y:.0})."),
+                &[],
+            );
+            true
+        }
+        Ok(Err(error)) => {
+            ali_coins_core::logging::global()
+                .warn(&format!("Touch no card {data_id} falhou: {error}"), &[]);
+            false
+        }
+        Err(_) => {
+            ali_coins_core::logging::global().warn(
+                &format!("Touch no card {data_id} excedeu o tempo limite."),
+                &[],
+            );
+            false
+        }
+    }
+}
+
+/// Clique real de mouse no card.
+async fn try_mouse(page: &dyn Page, data_id: &str, x: f64, y: f64) -> bool {
+    if with_timeout(6000, page.click_at(x, y)).await.is_some() {
+        ali_coins_core::logging::global().info(
+            &format!("Clique (mouse) no card {data_id} ({x:.0},{y:.0})."),
+            &[],
+        );
+        true
+    } else {
+        false
+    }
 }
 
 /// URL atual da página (com teto de tempo).

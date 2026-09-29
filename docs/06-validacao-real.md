@@ -180,3 +180,18 @@ Rodadas seguintes de investigação (29/09, tarde):
 - Hipóteses em aberto (D-10): aguardar o fim do loading da gaveta pós-GO antes
   de tocar; exigir abertura do detalhe do item (beacon no carregamento); ou um
   feed dedicado aberto pelo GO que o `find_changed_page` esteja ignorando.
+
+Experimentos realizados (29/09, fim do dia), ambos sem mover o contador `0/2`:
+
+- **(a) esperar o loading pós-GO:** o loading termina (1–3s) e o conteúdo é a
+  própria lista de tarefas — não existe UI de "modo tocar" para aguardar.
+- **(b) clique de mouse (abre o detalhe) com orçamento de 5 min:** o clique
+  navega para o detalhe, mas a recuperação (`goBack`/`goto`) às vezes cai no
+  layout PC (`coin-pc-index`), os tempos por toque passam de 30s e a rodada
+  continua `0/2`.
+
+Próximo passo recomendado: **captura de rede (CDP `Network`)** durante o toque
+para identificar a chamada que o site espera nessa tarefa (a contabilização
+parece server-side), ou uma execução do oráculo em dia em que ele conclua a
+tarefa para comparar os requests. Observação: o oráculo vem falhando nessa
+tarefa nos últimos dias — pode ser mudança do site, não do port.
