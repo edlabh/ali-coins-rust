@@ -496,6 +496,13 @@ pub async fn run_tasks(
                     &[],
                 );
                 crate::tasks_surprise::save_debug(page, "surprise-after-go").await;
+                let loading_done =
+                    crate::tasks_verifier::wait_drawer_loading(page, Duration::from_secs(25)).await;
+                let drawer_snippet = crate::tasks_verifier::drawer_text(page).await;
+                ali_coins_core::logging::global().info(
+                    &format!("Pós-GO: loading concluído={loading_done} | gaveta: {drawer_snippet}"),
+                    &[],
+                );
                 let closed = crate::tasks_verifier::close_task_drawer(page).await;
                 let hit = bounded(
                     3000,

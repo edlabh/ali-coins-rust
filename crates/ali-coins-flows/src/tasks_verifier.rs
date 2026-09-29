@@ -286,6 +286,43 @@ pub async fn click_task_button_trusted(page: &dyn Page, title: &str) -> bool {
     click_task_button(page, title).await
 }
 
+/// Aguarda o loading interno da gaveta (`common-loading-icon`) sumir.
+///
+/// Após o GO de algumas tarefas a gaveta recarrega o conteúdo; fechar/tocar
+/// antes do fim do loading pode impedir o "modo" da tarefa de armar.
+pub async fn wait_drawer_loading(page: &dyn Page, timeout: Duration) -> bool {
+    let deadline = std::time::Instant::now() + timeout;
+    loop {
+        let script = "(() => { const el = document.querySelector('.common-loading-icon'); \
+                      if (!el) return false; \
+                      const r = el.getBoundingClientRect(); \
+                      return r.width > 0 && r.height > 0 && el.offsetParent !== null; })()";
+        let loading = page
+            .eval_raw(script)
+            .await
+            .ok()
+            .and_then(|value| value.as_bool())
+            .unwrap_or(false);
+        if !loading {
+            return true;
+        }
+        if std::time::Instant::now() >= deadline {
+            return false;
+        }
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    }
+}
+
+/// Conteúdo textual da gaveta (para diagnóstico).
+pub async fn drawer_text(page: &dyn Page) -> String {
+    let script = "(() => { const el = document.querySelector('.e2e_task'); \
+                  return el ? (el.innerText || '').split(/\\s+/).join(' ').slice(0, 240) : ''; })()";
+    page.eval_raw(script)
+        .await
+        .ok()
+        .and_then(|value| value.as_str().map(str::to_string))
+        .unwrap_or_default()
+}
 /// A gaveta de tarefas está aberta (altura > 100)?
 pub async fn drawer_open(page: &dyn Page) -> bool {
     let script = "(() => { const el = document.querySelector('.e2e_task'); \
