@@ -67,6 +67,9 @@ pub struct CheckinInput {
     /// Início da etapa (ISO).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub start_time: Option<String>,
+    /// Fim da etapa (ISO).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end_time: Option<String>,
     /// Crédito vindo do extrato de hoje (contabiliza mesmo se alreadyCollected).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub checkin_coins_from_ledger: Option<bool>,

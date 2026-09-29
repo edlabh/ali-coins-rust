@@ -280,6 +280,7 @@ pub fn run(args: &[String]) -> StdExitCode {
             .await;
 
             let main_started = Instant::now();
+            let main_start_time = chrono::Utc::now();
             let element_timeout = Duration::from_millis(config.element_timeout);
             let selector_timeout = Duration::from_millis(config.selector_timeout);
 
@@ -482,7 +483,8 @@ pub fn run(args: &[String]) -> StdExitCode {
                         .map(|outcome| {
                             serde_json::json!({
                                 "title": outcome.title,
-                                "status": outcome.status
+                                "status": outcome.status,
+                                "coins": outcome.coins
                             })
                         })
                         .collect(),
@@ -514,8 +516,9 @@ pub fn run(args: &[String]) -> StdExitCode {
                     total_duration: Some(total_duration.as_str()),
                     step1_duration: Some(step1_duration.as_str()),
                     step2_duration: Some(step2_duration.as_str()),
+                    main_start_time: Some(main_start_time),
+                    main_end_time: Some(chrono::Utc::now()),
                     tasks_error: tasks_error.as_deref(),
-                    ..UnifiedMeta::default()
                 },
             );
 
@@ -525,23 +528,10 @@ pub fn run(args: &[String]) -> StdExitCode {
                     serde_json::to_string_pretty(&payload).unwrap_or_else(|_| "{}".to_string())
                 );
             } else {
-                logging::global().info(
-                    &format!(
-                        "Execução concluída: check-in {} | tarefas {} | duração {}",
-                        if just_collected || confirmed_by_ledger {
-                            "coletado"
-                        } else if already_collected {
-                            "já coletado"
-                        } else {
-                            "sem ação"
-                        },
-                        tasks_run.as_ref().map_or_else(
-                            || "falhou".to_string(),
-                            |run| format!("{} tarefas ({} ações)", run.results.len(), run.actions)
-                        ),
-                        total_duration
-                    ),
-                    &[],
+                crate::report_render::render_unified(
+                    &payload,
+                    Some(&checkin_input),
+                    &account.masked_user,
                 );
             }
 

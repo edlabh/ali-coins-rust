@@ -2,7 +2,10 @@
 
 use ali_coins_core::config::{Config, EnvSource, load_accounts};
 use ali_coins_core::secure_fs::safe_write_file;
-use ali_coins_core::session::{SessionOptions, export_session_token, import_session_token};
+use ali_coins_core::session::{
+    SessionOptions, export_session_token, import_session_token, migrate_legacy_session,
+    rotate_session_secret,
+};
 use std::io::Read as _;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -18,6 +21,26 @@ fn flag_value<'a>(args: &'a [String], name: &str) -> Option<&'a str> {
         .position(|arg| arg == name)
         .and_then(|index| args.get(index + 1))
         .map(String::as_str)
+}
+
+/// Valor de um argumento no formato `--flag=valor`.
+fn flag_prefix<'a>(args: &'a [String], prefix: &str) -> Option<&'a str> {
+    args.iter().find_map(|arg| arg.strip_prefix(prefix))
+}
+
+/// Seleção de contas para `--rotate`/`--migrate` (padrão: todas as contas).
+fn selected_accounts<'a>(
+    args: &[String],
+    accounts: &'a [ali_coins_core::config::Account],
+) -> Result<Vec<&'a ali_coins_core::config::Account>, ExitCode> {
+    if let Some(selector) = flag_value(args, "--account") {
+        if let Some(account) = resolve_account(accounts, selector) {
+            return Ok(vec![account]);
+        }
+        eprintln!("Conta '{selector}' não encontrada.");
+        return Err(ExitCode::from(1));
+    }
+    Ok(accounts.iter().collect())
 }
 
 pub(crate) fn bootstrap() -> Option<(
@@ -77,6 +100,9 @@ fn account_options(
 
 /// `ali-coins export-session [--all] [--account <id>] [--show-token]`
 pub fn run_export(args: &[String]) -> ExitCode {
+    if has_flag(args, "--rotate") {
+        return run_rotate(args);
+    }
     let Some((base_dir, env, _config, accounts)) = bootstrap() else {
         return ExitCode::from(1);
     };
@@ -143,8 +169,155 @@ pub fn run_export(args: &[String]) -> ExitCode {
     }
 }
 
+/// `ali-coins export-session --rotate [--all] [--account <id>] [--new-secret-from-env=VAR]`
+fn run_rotate(args: &[String]) -> ExitCode {
+    let Some((base_dir, env, _config, accounts)) = bootstrap() else {
+        return ExitCode::from(1);
+    };
+    let selected = match selected_accounts(args, &accounts) {
+        Ok(selected) => selected,
+        Err(code) => return code,
+    };
+
+    let new_var = flag_prefix(args, "--new-secret-from-env=")
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or("SESSION_SECRET_NEW");
+    let old_secret = env
+        .get("SESSION_SECRET_OLD")
+        .or_else(|| env.get("SESSION_SECRET"))
+        .map(str::to_string);
+    let new_secret = env.get(new_var).map(str::to_string).or_else(|| {
+        env.get("SESSION_SECRET_OLD")
+            .and_then(|_| env.get("SESSION_SECRET").map(str::to_string))
+    });
+
+    let mut rotated = 0_u32;
+    let mut failed = 0_u32;
+    for account in selected {
+        let enc_path = PathBuf::from(format!("{}.enc", account.session_path.display()));
+        if !account.session_path.exists() && !enc_path.exists() {
+            ali_coins_core::logging::global().warn(
+                &format!(
+                    "[{}] Nenhuma sessão ativa encontrada. Pulando...",
+                    account.masked_user
+                ),
+                &[],
+            );
+            continue;
+        }
+        let mut options = account_options(&base_dir, account, false);
+        options.old_secret.clone_from(&old_secret);
+        options.new_secret.clone_from(&new_secret);
+        match rotate_session_secret(&options, &base_dir, &env) {
+            Ok(outcome) => {
+                rotated += 1;
+                ali_coins_core::logging::global().info(
+                    &format!(
+                        "[{}] chave rotacionada (backup: {})",
+                        account.masked_user,
+                        outcome.backup_path.display()
+                    ),
+                    &[],
+                );
+            }
+            Err(error) => {
+                failed += 1;
+                ali_coins_core::logging::global().error(
+                    &format!("[{}] falha na rotação: {error}", account.masked_user),
+                    &[],
+                );
+            }
+        }
+    }
+
+    if rotated == 0 {
+        ali_coins_core::logging::global().error("Nenhuma conta foi rotacionada com sucesso.", &[]);
+        return ExitCode::from(1);
+    }
+    if failed > 0 {
+        ali_coins_core::logging::global().warn(
+            "[PARCIAL] Rotação concluída com falhas em algumas contas.",
+            &[],
+        );
+        return ExitCode::from(1);
+    }
+    ali_coins_core::logging::global().info(
+        "[SUCESSO] Rotação de chave concluída para todas as contas.",
+        &[],
+    );
+    ExitCode::SUCCESS
+}
+
+/// `ali-coins import-session --migrate [--all] [--account <id>] [--json]`
+fn run_migrate(args: &[String]) -> ExitCode {
+    let Some((base_dir, env, _config, accounts)) = bootstrap() else {
+        return ExitCode::from(1);
+    };
+    let json = has_flag(args, "--json");
+    let selected = match selected_accounts(args, &accounts) {
+        Ok(selected) => selected,
+        Err(code) => return code,
+    };
+
+    let mut migrated = 0_u32;
+    let mut results: Vec<serde_json::Value> = Vec::new();
+    for account in selected {
+        let options = account_options(&base_dir, account, false);
+        match migrate_legacy_session(&options, &base_dir, &env) {
+            Ok(outcome) => {
+                migrated += 1;
+                results.push(serde_json::json!({
+                    "user": account.masked_user,
+                    "cookiesCount": outcome.cookies_count,
+                    "migrated": outcome.migrated,
+                    "encrypted": outcome.encrypted,
+                    "sessionPath": account.session_path,
+                }));
+            }
+            Err(error) => {
+                results.push(serde_json::json!({
+                    "user": account.masked_user,
+                    "migrated": false,
+                    "error": error.to_string(),
+                    "sessionPath": account.session_path,
+                }));
+                ali_coins_core::logging::global().error(
+                    &format!("[{}] falha na migração: {error}", account.masked_user),
+                    &[],
+                );
+            }
+        }
+    }
+
+    if json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&results).unwrap_or_else(|_| "[]".to_string())
+        );
+    } else if migrated == 0 {
+        ali_coins_core::logging::global().error(
+            "Nenhuma sessão legada foi migrada (verifique session.json e ENCRYPT_LOCAL_SESSION).",
+            &[],
+        );
+    } else {
+        ali_coins_core::logging::global().info(
+            &format!("{migrated} sessão(ões) legada(s) migrada(s) para .enc."),
+            &[],
+        );
+    }
+
+    if migrated == 0 {
+        ExitCode::from(1)
+    } else {
+        ExitCode::SUCCESS
+    }
+}
+
 /// `ali-coins import-session [--all] [--account <id>] [--from-file <path>] [--plaintext] [--keep-tokens]`
 pub fn run_import(args: &[String]) -> ExitCode {
+    if has_flag(args, "--migrate") {
+        return run_migrate(args);
+    }
     let Some((base_dir, env, _config, accounts)) = bootstrap() else {
         return ExitCode::from(1);
     };

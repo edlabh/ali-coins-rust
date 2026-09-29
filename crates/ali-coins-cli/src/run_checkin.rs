@@ -181,9 +181,11 @@ pub fn run(args: &[String]) -> StdExitCode {
                 nav_timeout: Duration::from_millis(config.nav_timeout),
             };
             let step_started = Instant::now();
+            let step_start_time = chrono::Utc::now();
             let result = run_checkin(&*page, &account.user, &account.password, &checkin_options)
                 .await
                 .map_err(|error| format!("{error}"))?;
+            let step_end_time = chrono::Utc::now();
             let step_duration = ali_coins_core::time::format_duration(
                 i64::try_from(step_started.elapsed().as_millis()).unwrap_or(i64::MAX),
             );
@@ -275,6 +277,8 @@ pub fn run(args: &[String]) -> StdExitCode {
                 streak_days: Some(streak_value),
                 total_balance: total_balance.clone(),
                 duration: Some(step_duration.clone()),
+                start_time: Some(step_start_time.to_rfc3339()),
+                end_time: Some(step_end_time.to_rfc3339()),
                 checkin_coins_from_ledger: Some(checkin_coins_from_ledger),
                 ..CheckinInput::default()
             };
@@ -285,6 +289,8 @@ pub fn run(args: &[String]) -> StdExitCode {
                     user: Some(&account.user),
                     total_duration: Some(step_duration.as_str()),
                     step1_duration: Some(step_duration.as_str()),
+                    main_start_time: Some(step_start_time),
+                    main_end_time: Some(step_end_time),
                     ..UnifiedMeta::default()
                 },
             );
@@ -294,21 +300,7 @@ pub fn run(args: &[String]) -> StdExitCode {
                     serde_json::to_string_pretty(&payload).unwrap_or_else(|_| "{}".to_string())
                 );
             } else {
-                logging::global().info(
-                    &format!(
-                        "Check-in: {} | streak {} | saldo {}",
-                        if just_collected || checkin_coins_from_ledger || confirmed_by_ledger {
-                            "coletado"
-                        } else if already_collected {
-                            "já coletado"
-                        } else {
-                            "não coletado"
-                        },
-                        streak_days.map_or_else(|| "N/D".to_string(), |value| value.to_string()),
-                        total_balance.as_deref().unwrap_or("N/D")
-                    ),
-                    &[],
-                );
+                crate::report_render::render_checkin(&checkin);
             }
 
             // Notificação Telegram (best-effort; nunca falha o fluxo).

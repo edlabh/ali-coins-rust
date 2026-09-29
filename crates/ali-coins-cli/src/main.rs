@@ -8,6 +8,7 @@
 mod checkin_parity;
 mod export_import;
 mod notify_test;
+mod report_render;
 mod run_all;
 mod run_checkin;
 mod run_tasks;
