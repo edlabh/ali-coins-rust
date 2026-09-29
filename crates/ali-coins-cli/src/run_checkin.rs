@@ -176,20 +176,40 @@ pub fn run(args: &[String]) -> StdExitCode {
             );
 
             // Persiste a sessão renovada (cookies + localStorage filtrado).
-            if let Ok(state) = page.storage_state().await {
-                let streak_days = result.streak_days;
+            let final_state = page.storage_state().await.ok();
+            if let Some(state) = &final_state {
                 let mut save_options = session_options.clone();
-                save_options.streak_days = streak_days;
-                if save_session(&save_options, &base_dir, &env, state, &account.user).is_ok() {
+                save_options.streak_days = result.streak_days;
+                if save_session(&save_options, &base_dir, &env, state.clone(), &account.user)
+                    .is_ok()
+                {
                     logging::global().info("Sessão atualizada em disco.", &[]);
                 }
             }
 
-            // Relatório unificado (C-09).
-            let streak_value = result
+            // Saldo/streak/extrato do dia no desktop (fonte de verdade do oráculo).
+            let desktop = ali_coins_flows::desktop::read_desktop_report(
+                &*browser,
+                final_state.as_ref(),
+                Duration::from_millis(config.nav_timeout_short),
+            )
+            .await;
+            let bonus_from_ledger = desktop.as_ref().and_then(|data| data.today_bonus_coins);
+            let checkin_coins_from_ledger = bonus_from_ledger.is_some_and(|value| value > 0);
+            let streak_days = result
                 .streak_days
+                .or_else(|| desktop.as_ref().and_then(|data| data.desktop_streak));
+            let total_balance = desktop
+                .as_ref()
+                .and_then(|data| data.total_balance.clone())
+                .or_else(|| result.total_balance.clone());
+
+            // Relatório unificado (C-09).
+            let streak_value = streak_days
                 .map_or_else(|| StreakValue::Text("N/D".to_string()), StreakValue::Number);
-            let coins = if !result.already_collected && result.collected {
+            let coins = if let Some(bonus) = bonus_from_ledger {
+                Some(bonus)
+            } else if !result.already_collected && result.collected {
                 Some(checkin_coins_from_streak(Some(&streak_value)))
             } else {
                 None
@@ -198,8 +218,9 @@ pub fn run(args: &[String]) -> StdExitCode {
                 already_collected: Some(result.already_collected),
                 coins_gained_today: coins.map(|value| value.to_string()),
                 streak_days: Some(streak_value),
-                total_balance: result.total_balance.clone(),
+                total_balance: total_balance.clone(),
                 duration: Some(step_duration.clone()),
+                checkin_coins_from_ledger: Some(checkin_coins_from_ledger),
                 ..CheckinInput::default()
             };
             let payload = build_unified_report_payload(
@@ -221,17 +242,15 @@ pub fn run(args: &[String]) -> StdExitCode {
                 logging::global().info(
                     &format!(
                         "Check-in: {} | streak {} | saldo {}",
-                        if result.already_collected {
-                            "já coletado"
-                        } else if result.collected {
+                        if result.collected || checkin_coins_from_ledger {
                             "coletado"
+                        } else if result.already_collected {
+                            "já coletado"
                         } else {
                             "não coletado"
                         },
-                        result
-                            .streak_days
-                            .map_or_else(|| "N/D".to_string(), |value| value.to_string()),
-                        result.total_balance.as_deref().unwrap_or("N/D")
+                        streak_days.map_or_else(|| "N/D".to_string(), |value| value.to_string()),
+                        total_balance.as_deref().unwrap_or("N/D")
                     ),
                     &[],
                 );
@@ -241,16 +260,15 @@ pub fn run(args: &[String]) -> StdExitCode {
             if config.telegram_enabled {
                 let timeout = Duration::from_millis(config.telegram_timeout_ms);
                 if let Ok(client) = SafeHttpClient::new(config.allow_private_webhooks, timeout) {
-                    let event = if result.already_collected {
-                        TelegramEvent::AlreadyCollected
-                    } else if result.collected {
+                    let event = if result.collected || checkin_coins_from_ledger {
                         TelegramEvent::Success
+                    } else if result.already_collected {
+                        TelegramEvent::AlreadyCollected
                     } else {
                         TelegramEvent::Failure
                     };
-                    let streak_display = result
-                        .streak_days
-                        .map_or_else(|| "N/D".to_string(), |value| value.to_string());
+                    let streak_display =
+                        streak_days.map_or_else(|| "N/D".to_string(), |value| value.to_string());
                     let host = notify_host(&config);
                     let chat_id = account
                         .telegram_chat_id
@@ -258,7 +276,7 @@ pub fn run(args: &[String]) -> StdExitCode {
                         .unwrap_or_else(|| config.telegram_chat_id.clone());
                     let context = TelegramContext {
                         user: Some(account.masked_user.as_str()),
-                        total_balance: result.total_balance.as_deref(),
+                        total_balance: total_balance.as_deref(),
                         coins_gained: coins,
                         streak_days: Some(streak_display.as_str()),
                         previous_streak_days: None,
@@ -305,10 +323,10 @@ pub fn run(args: &[String]) -> StdExitCode {
                 }
             }
 
-            if result.already_collected {
-                Ok(ExitCode::NoAction.as_i32())
-            } else if result.collected {
+            if result.collected || checkin_coins_from_ledger {
                 Ok(ExitCode::Success.as_i32())
+            } else if result.already_collected {
+                Ok(ExitCode::NoAction.as_i32())
             } else {
                 Ok(ExitCode::Failure.as_i32())
             }

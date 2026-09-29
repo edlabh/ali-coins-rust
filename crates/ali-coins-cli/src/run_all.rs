@@ -265,15 +265,32 @@ pub fn run(args: &[String]) -> StdExitCode {
                 }
             }
 
-            // Saldo após o check-in (base para medir o ganho das tarefas).
-            let balance_after_checkin = match result.total_balance.clone() {
-                Some(balance) => Some(balance),
-                None => page
-                    .content()
-                    .await
-                    .ok()
-                    .and_then(|content| parse_total_balance(&content)),
-            };
+            // Saldo/streak/extrato do dia no desktop (fonte de verdade do oráculo).
+            let desktop_after_checkin = ali_coins_flows::desktop::read_desktop_report(
+                &*browser,
+                state_after_checkin.as_ref(),
+                Duration::from_millis(config.nav_timeout_short),
+            )
+            .await;
+            let bonus_from_ledger = desktop_after_checkin
+                .as_ref()
+                .and_then(|data| data.today_bonus_coins);
+            let checkin_coins_from_ledger = bonus_from_ledger.is_some_and(|value| value > 0);
+            let streak_days = result.streak_days.or_else(|| {
+                desktop_after_checkin
+                    .as_ref()
+                    .and_then(|data| data.desktop_streak)
+            });
+            let mobile_balance = page
+                .content()
+                .await
+                .ok()
+                .and_then(|content| parse_total_balance(&content));
+            let balance_after_checkin = desktop_after_checkin
+                .as_ref()
+                .and_then(|data| data.total_balance.clone())
+                .or_else(|| result.total_balance.clone())
+                .or(mobile_balance);
 
             // ----- ETAPA 2/2: tarefas diárias -----
             let step2_started = Instant::now();
@@ -311,30 +328,53 @@ pub fn run(args: &[String]) -> StdExitCode {
             }
 
             // Salva a sessão novamente após as tarefas.
-            if tasks_run.is_some() {
-                if let Ok(state) = page.storage_state().await {
+            let state_after_tasks = if tasks_run.is_some() {
+                let state = page.storage_state().await.ok();
+                if let Some(state) = &state {
                     let mut save_options = session_options.clone();
-                    save_options.streak_days = result.streak_days;
-                    let _ = save_session(&save_options, &base_dir, &env, state, &account.user);
+                    save_options.streak_days = streak_days;
+                    let _ =
+                        save_session(&save_options, &base_dir, &env, state.clone(), &account.user);
                 }
-            }
+                state
+            } else {
+                None
+            };
 
-            // Saldo final e ganho medido das tarefas.
-            let balance_after_tasks = page
+            // Extrato desktop após as tarefas: saldo final + ganhos reais.
+            let desktop_after_tasks = ali_coins_flows::desktop::read_desktop_report(
+                &*browser,
+                state_after_tasks.as_ref(),
+                Duration::from_millis(config.nav_timeout_short),
+            )
+            .await;
+            let mobile_balance = page
                 .content()
                 .await
                 .ok()
                 .and_then(|content| parse_total_balance(&content));
-            let tasks_coins = balance_diff(
-                balance_after_checkin.as_deref(),
-                balance_after_tasks.as_deref(),
-            );
+            let balance_after_tasks = desktop_after_tasks
+                .as_ref()
+                .and_then(|data| data.total_balance.clone())
+                .or(mobile_balance);
+            let missions_from_ledger = desktop_after_tasks
+                .as_ref()
+                .and_then(|data| data.today_missions_coins);
+            let tasks_coins_from_ledger = missions_from_ledger.is_some();
+            #[allow(clippy::cast_precision_loss)]
+            let tasks_coins = missions_from_ledger.map(|value| value as f64).or_else(|| {
+                balance_diff(
+                    balance_after_checkin.as_deref(),
+                    balance_after_tasks.as_deref(),
+                )
+            });
 
             // ----- ETAPA 3/3: relatório consolidado + notificação única -----
-            let streak_value = result
-                .streak_days
+            let streak_value = streak_days
                 .map_or_else(|| StreakValue::Text("N/D".to_string()), StreakValue::Number);
-            let checkin_coins = if !result.already_collected && result.collected {
+            let checkin_coins = if let Some(bonus) = bonus_from_ledger {
+                Some(bonus)
+            } else if !result.already_collected && result.collected {
                 Some(checkin_coins_from_streak(Some(&streak_value)))
             } else {
                 None
@@ -343,8 +383,9 @@ pub fn run(args: &[String]) -> StdExitCode {
                 already_collected: Some(result.already_collected),
                 coins_gained_today: checkin_coins.map(|value| value.to_string()),
                 streak_days: Some(streak_value),
-                total_balance: result.total_balance.clone(),
+                total_balance: balance_after_checkin.clone(),
                 duration: Some(step1_duration.clone()),
+                checkin_coins_from_ledger: Some(checkin_coins_from_ledger),
                 ..CheckinInput::default()
             };
             let tasks_input = tasks_run.as_ref().map(|run| TasksInput {
@@ -360,6 +401,7 @@ pub fn run(args: &[String]) -> StdExitCode {
                         .collect(),
                 ),
                 coins_gained: tasks_coins,
+                coins_from_ledger: Some(tasks_coins_from_ledger),
                 initial_balance: balance_after_checkin
                     .as_deref()
                     .map(|value| NumOrText::Text(value.to_string())),
@@ -416,7 +458,7 @@ pub fn run(args: &[String]) -> StdExitCode {
                 );
             }
 
-            let had_new_checkin = !result.already_collected || result.collected;
+            let had_new_checkin = !result.already_collected || checkin_coins_from_ledger;
             let had_task_actions = tasks_run.as_ref().is_some_and(|run| run.actions > 0);
             let event = if !had_new_checkin && !had_task_actions {
                 TelegramEvent::AlreadyCollected

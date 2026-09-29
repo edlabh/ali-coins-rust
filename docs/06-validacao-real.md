@@ -98,3 +98,34 @@ Pendências confirmadas em produção:
    medir o ganho das tarefas (`tasksCoinsGained=0`).
 2. Os status de tarefas (`Concluída (n/2)` / `Falhou (limite de 4 tentativas)`)
    são registrados no relatório normalmente.
+
+## Extrato desktop em produção — saldo, bônus e missões (manhã de 2026-09-29)
+
+Implementação da leitura desktop (`mycoin.html`) com as mesmas regexes do
+oráculo (`libs/ui/balance.js::getBalanceDesktop`) e uso do **ledger como fonte
+de verdade** para o relatório e a notificação:
+
+- `all` ao vivo na VM (`11:57–12:04 UTC`, conta `edelanoali@gmail.com`):
+
+  | Leitura | Valor | Cross-check |
+  |---|---|---|
+  | Saldo | `996` | primeiro valor real após o `N/D` |
+  | Bônus (check-in) | `+15` | UI mobile do dia: `2 day streak` / `Today ✓ 15` |
+  | Missões (tarefas) | `0` | nenhuma tarefa creditada nesta execução |
+  | Sequência | `2` | igual à UI mobile |
+
+- Relatório: `checkin.alreadyCollected=true`, `checkin.coinsGainedToday=15`,
+  `checkin.checkinCoinsFromLedger=true`, `meta.finalBalance="996 moedas"`,
+  `meta.totalCoinsGained=15` — o crédito real do dia entra no relatório mesmo
+  com o check-in já coletado (regra do oráculo).
+- Telegram: `🪙 Ganhas hoje: +15 moedas (check-in +15 / tarefas +0)` ·
+  `💰 Saldo: 996 moedas` · `📅 Sequência: 2 dias`.
+- Fluxos cobertos: `checkin` (leitura pós-check-in), `all` (pós-check-in e
+  pós-tarefas) e `tasks` (saldo final + missões).
+
+Lacuna remanescente (Fase 4): a **execução das tarefas** continua conservadora
+— o runner não porta `libs/tasks/{verifier,surprise,dispatcher,search,state}`
+do oráculo, então as tarefas não são creditadas (`missões=0`, status
+`Falhou/Pendente`). Evidência comparativa no mesmo dia: o oráculo (conta
+`ag***`) completou 7 de 8 tarefas visíveis (`+51 moedas`), incluindo busca,
+super discounts (3 rodadas), coupons e sponsored items.

@@ -7,6 +7,7 @@
 
 pub mod balance;
 pub mod checkin;
+pub mod desktop;
 pub mod login;
 pub mod navigation;
 pub mod tasks;
