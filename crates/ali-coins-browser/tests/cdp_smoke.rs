@@ -215,3 +215,45 @@ async fn storage_state_ida_e_volta() {
     assert_eq!(entries[0]["name"], "userInfo");
     assert_eq!(entries[0]["value"], "1");
 }
+
+#[tokio::test]
+#[ignore = "requer Chromium instalado (rode com --ignored)"]
+async fn grava_trace_cdp_em_json() {
+    let env = EnvSource::from_current_process();
+    let args = build_chromium_args(&ChromiumArgsInput {
+        env: &env,
+        is_root: false,
+        dev_shm_small: true,
+        force_no_sandbox: false,
+        low_memory: Some(true),
+    });
+    let profile_dir = tempfile::tempdir().expect("perfil");
+    let options = LaunchOptions {
+        headless: true,
+        args,
+        executable_path: std::env::var("ALI_COINS_CHROME")
+            .ok()
+            .map(std::path::PathBuf::from),
+        user_data_dir: Some(profile_dir.path().to_path_buf()),
+        ..LaunchOptions::default()
+    };
+    let driver = CdpDriver::new();
+    let browser = driver.launch(&options).await.expect("launch");
+    let page = browser.new_page().await.expect("page");
+    assert!(page.start_trace().await.expect("start trace"));
+    page.goto(
+        "data:text/html,<title>trace</title><h1>ok</h1>",
+        &NavOptions::default(),
+    )
+    .await
+    .expect("goto");
+    let out = tempfile::tempdir().expect("saida");
+    let path = page
+        .stop_trace(out.path(), "smoke", true)
+        .await
+        .expect("stop trace")
+        .expect("arquivo de trace");
+    let body = std::fs::read_to_string(&path).expect("lê trace");
+    let events: Vec<serde_json::Value> = serde_json::from_str(&body).expect("json");
+    assert!(!events.is_empty(), "trace sem eventos");
+}

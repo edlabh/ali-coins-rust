@@ -286,6 +286,21 @@ desktop, tanto no check-in quanto nas tarefas (como o oráculo):
   (`alreadyCollected=false`, `streakDays 3→4`) e o saldo pós-check-in foi
   sincronizado (`1128`) enquanto o extrato não refletia o crédito.
 
+## D-03 — trace CDP (30/09/2026) — validado com testes e smoke opt-in
+
+Implementado o trace CDP (`Tracing.start/end`) com as regras do oráculo para
+`PW_TRACE` (default `off` em host de baixa memória, `retain-on-failure` no host
+normal), retenção por modo/erro e arquivo `0600` em `PW_OUTPUT_DIR` (padrão
+`scratch/`), com o **mesmo nome** `<nome>-trace-<epoch_ms>` mas extensão `.json`
+(trace nativo do CDP; o zip do Playwright fica como divergência flexível).
+
+- Puro/testável: `decide_trace`, `resolve_trace_mode`, `diagnostics_dir`,
+  `trace_file_name` e gravação `0600` (5 testes no crate de browser).
+- Smoke `#[ignore]` `grava_trace_cdp_em_json` (requer Chromium; rodar com
+  `--ignored`) valida o ciclo real `start → navegação → stop` com eventos.
+- Ligado no fluxo `all` atrás de `PW_TRACE`; **na VM o default é desligado**
+  (`CHROMIUM_LOW_MEMORY` ligado), então o cron não captura trace por padrão.
+
 ## Multi-conta sequencial (30/09/2026) — validado apenas com mocks
 
 Implementado o modo multi-conta do `all` (paridade com o fluxo multi do
