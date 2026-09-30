@@ -21,4 +21,7 @@ if [[ "$CODE" -eq 1 ]]; then
   CODE=$?
 fi
 
+# Linha de fechamento (facilita a observação da Fase 6 e auditoria no cron.log).
+echo "[run_all] exit=$CODE fim: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
 exit "$CODE"
