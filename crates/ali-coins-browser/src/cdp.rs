@@ -108,6 +108,8 @@ pub struct CdpPageHandle {
     page: CdpPage,
     /// Origins http(s) visitados nesta página (para o storage state multi-origin).
     visited_origins: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
+    /// Trace CDP ativo (diagnóstico D-03).
+    trace: std::sync::Mutex<Option<crate::trace::Trace>>,
 }
 
 #[async_trait]
@@ -149,6 +151,7 @@ impl Browser for CdpBrowserHandle {
         Ok(Box::new(CdpPageHandle {
             page,
             visited_origins: std::sync::Arc::clone(&self.visited_origins),
+            trace: std::sync::Mutex::new(None),
         }))
     }
 
@@ -164,6 +167,7 @@ impl Browser for CdpBrowserHandle {
                 Box::new(CdpPageHandle {
                     page,
                     visited_origins: std::sync::Arc::clone(&self.visited_origins),
+                    trace: std::sync::Mutex::new(None),
                 }) as Box<dyn Page>
             })
             .collect())
@@ -474,6 +478,27 @@ impl Page for CdpPageHandle {
             self.page.screenshot(ScreenshotParams::default()),
         )
         .await
+    }
+
+    async fn start_trace(&self) -> Result<bool, BrowserError> {
+        let trace = crate::trace::Trace::start(&self.page).await?;
+        if let Ok(mut guard) = self.trace.lock() {
+            *guard = Some(trace);
+        }
+        Ok(true)
+    }
+
+    async fn stop_trace(
+        &self,
+        output_dir: &std::path::Path,
+        name: &str,
+        keep: bool,
+    ) -> Result<Option<std::path::PathBuf>, BrowserError> {
+        let trace = self.trace.lock().ok().and_then(|mut guard| guard.take());
+        let Some(trace) = trace else {
+            return Ok(None);
+        };
+        trace.stop(&self.page, output_dir, name, keep).await
     }
 
     async fn close(&self) -> Result<(), BrowserError> {

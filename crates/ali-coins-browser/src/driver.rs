@@ -197,6 +197,20 @@ pub trait Page: Send + Sync {
     async fn scroll_by(&self, x: i64, y: i64) -> Result<(), BrowserError>;
     /// Captura screenshot.
     async fn screenshot(&self) -> Result<Vec<u8>, BrowserError>;
+    /// Inicia um trace CDP (diagnóstico; default: não suportado).
+    async fn start_trace(&self) -> Result<bool, BrowserError> {
+        Ok(false)
+    }
+    /// Finaliza o trace CDP e grava o arquivo quando `keep` (default: não suportado).
+    async fn stop_trace(
+        &self,
+        output_dir: &std::path::Path,
+        name: &str,
+        keep: bool,
+    ) -> Result<Option<std::path::PathBuf>, BrowserError> {
+        let _ = (output_dir, name, keep);
+        Ok(None)
+    }
     /// Fecha a página.
     async fn close(&self) -> Result<(), BrowserError>;
 }

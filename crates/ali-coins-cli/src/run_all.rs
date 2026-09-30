@@ -355,6 +355,18 @@ pub fn run(args: &[String]) -> StdExitCode {
                 let _ = page.seed_storage_state(state).await;
             }
 
+            // D-03: trace CDP (opt-in; desligado por padrão em host de baixa memória).
+            let trace_mode = ali_coins_browser::trace::resolve_trace_mode(&env);
+            let trace_dir = ali_coins_browser::trace::diagnostics_dir(&env);
+            let (trace_should_start, _) = ali_coins_browser::trace::decide_trace(trace_mode, false);
+            let trace_started =
+                trace_should_start && page.start_trace().await.unwrap_or(false);
+            if trace_started {
+                logging::global().info("Trace CDP iniciado (PW_TRACE).", &[]);
+            }
+
+            let flow_result: Result<i32, String> = async {
+
             // Pré-checagem desktop (D-08): saldo/streak/extrato antes do mobile.
             let early_desktop = crate::checkin_parity::read_early_desktop(
                 &*browser,
@@ -753,6 +765,25 @@ pub fn run(args: &[String]) -> StdExitCode {
                     Ok(ExitCode::NoAction.as_i32())
                 }
             }
+        }
+        .await;
+
+        let (_, trace_keep) =
+            ali_coins_browser::trace::decide_trace(trace_mode, flow_result.is_err());
+        if trace_started {
+            match page.stop_trace(&trace_dir, "all", trace_keep).await {
+                Ok(Some(path)) => logging::global().warn(
+                    &format!("Trace CDP salvo em {}", path.display()),
+                    &[],
+                ),
+                Ok(None) => {}
+                Err(error) => logging::global().debug(
+                    &format!("Falha ao finalizar o trace CDP: {error}"),
+                    &[],
+                ),
+            }
+        }
+        flow_result
         })
         .map_or_else(
             |error: String| {

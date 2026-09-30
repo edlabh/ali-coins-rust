@@ -13,6 +13,7 @@ pub mod launch;
 pub mod mock;
 pub mod network;
 pub mod storage;
+pub mod trace;
 
 /// Versão do crate, herdada do workspace.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
