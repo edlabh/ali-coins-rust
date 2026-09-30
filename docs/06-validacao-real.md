@@ -268,6 +268,34 @@ Validação ao vivo (`checkin` avulso e `all` na VM):
   extrato (`ledger disponível: false`) naquele momento; o oráculo tem o mesmo
   atalho de reuso e o mesmo comportamento nesse cenário.
 
+## Tarefa de surpresa — reprodução do mecanismo do oráculo (30/09/2026)
+
+O oráculo concluiu as duas rodadas da tarefa **em outro host**, então o port
+passou a reproduzir o mecanismo dele em `tasks_surprise.rs`:
+
+1. **Clique real de mouse** no centro do card (`.feeds-discount-card`) com
+   **delay de 50 ms** entre press/release — como `card.click({ delay: 50 })` —
+   precedido de `scrollIntoView` e **verificação de alvo** (`elementFromPoint`
+   precisa devolver o card/descendente; caso contrário tenta de novo).
+2. **Emissão de toque**: `Emulation.setEmitTouchEventsForMouse(mobile)` no
+   perfil de device (o Playwright usa isso em contextos mobile), para que o
+   clique real chegue ao handler de "tap" do site.
+3. **Nova aba primeiro**: se o clique abrir a página do item em nova aba,
+   espera o load curto + 1 s (beacon), fecha a aba e mantém a feed intacta.
+4. **Mesma aba**: `goBack` com espera e, se necessário, `goto(feed)`; depois
+   aguarda os cards voltarem (até 45 s).
+5. **Overlays**: antes dos toques, neutraliza gaveta/máscaras/overlays de tela
+   cheia que interceptam o ponto de clique.
+6. **Diagnóstico**: cada clique loga `Pós-clique: url=… cards=… tracking=N->M`
+   (requests de tracking/carregamento antes/depois), expondo se o handler do
+   site reagiu.
+
+**Resultado neste host**: mesmo com o mecanismo fiel, os cliques **não geram
+tracking** (`42->42`) e a rodada não avança; o oráculo Node também falha neste
+host e conclui em outro. Evidência de que o bloqueio é do site/IP/estado da
+conta neste ambiente, não do algoritmo. Próximo passo: validar o port no host
+onde o oráculo funciona.
+
 ## Fase 1 fechada — `--rotate`/`--migrate` e relatório em texto (2026-09-29)
 
 - `export-session --rotate [--all] [--account <id>] [--new-secret-from-env=VAR]`

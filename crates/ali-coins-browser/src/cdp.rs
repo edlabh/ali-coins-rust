@@ -12,7 +12,8 @@ use ali_coins_core::logging;
 use async_trait::async_trait;
 use chromiumoxide::browser::{Browser as CdpBrowser, BrowserConfig};
 use chromiumoxide::cdp::browser_protocol::emulation::{
-    SetDeviceMetricsOverrideParams, SetLocaleOverrideParams, SetTouchEmulationEnabledParams,
+    SetDeviceMetricsOverrideParams, SetEmitTouchEventsForMouseConfiguration,
+    SetEmitTouchEventsForMouseParams, SetLocaleOverrideParams, SetTouchEmulationEnabledParams,
 };
 use chromiumoxide::cdp::browser_protocol::input::{
     DispatchMouseEventParams, DispatchMouseEventType, GestureSourceType, MouseButton,
@@ -498,6 +499,15 @@ pub async fn apply_device_profile(
     page.execute(SetTouchEmulationEnabledParams::new(profile.has_touch))
         .await
         .map_err(|err| BrowserError::Launch(err.to_string()))?;
+    if profile.has_touch {
+        // Playwright converte input de mouse em toque em contextos mobile — sem
+        // isso os handlers de "tap" do site não disparam com cliques reais.
+        let mut emit = SetEmitTouchEventsForMouseParams::new(true);
+        emit.configuration = Some(SetEmitTouchEventsForMouseConfiguration::Mobile);
+        page.execute(emit)
+            .await
+            .map_err(|err| BrowserError::Launch(err.to_string()))?;
+    }
 
     page.set_user_agent(profile.user_agent.as_str())
         .await
