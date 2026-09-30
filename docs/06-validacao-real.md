@@ -268,6 +268,24 @@ Validação ao vivo (`checkin` avulso e `all` na VM):
   extrato (`ledger disponível: false`) naquele momento; o oráculo tem o mesmo
   atalho de reuso e o mesmo comportamento nesse cenário.
 
+## Valores do extrato na mensagem (30/09/2026)
+
+Ajuste para que a mensagem exiba **sempre** o valor real creditado no extrato
+desktop, tanto no check-in quanto nas tarefas (como o oráculo):
+
+- `all`: o bônus do check-in usa a leitura pós-check-in **ou** a pós-tarefas
+  (a seção do dia pode não ter renderizado na primeira leitura reutilizada);
+  as missões das tarefas vêm do extrato **quando há lançamentos**
+  (`todayMissionsCount > 0`, igual ao `do_tasks.js`), senão cai na diferença de
+  saldo.
+- `checkin`: se a leitura escolhida (inclusive a reutilizada) não trouxe a
+  seção do dia, faz **uma leitura fresca** para exibir o valor real.
+- Evidência da execução ao vivo (30/09): `meta.checkinCoinsGained=20`,
+  `meta.tasksCoinsGained=46`, `meta.totalCoinsGained=66`,
+  `finalBalance="1108 moedas"`; o check-in foi coletado nesta execução
+  (`alreadyCollected=false`, `streakDays 3→4`) e o saldo pós-check-in foi
+  sincronizado (`1128`) enquanto o extrato não refletia o crédito.
+
 ## Tarefa de surpresa — reprodução do mecanismo do oráculo (30/09/2026)
 
 O oráculo concluiu as duas rodadas da tarefa **em outro host**, então o port

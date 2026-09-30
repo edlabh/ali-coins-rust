@@ -197,7 +197,7 @@ pub fn run(args: &[String]) -> StdExitCode {
 
             // 5. Confirmar resultado e saldo no desktop (reusa a checagem inicial
             // quando nada foi coletado, como o oráculo).
-            let desktop = if crate::checkin_parity::should_reuse_early_desktop(
+            let mut desktop = if crate::checkin_parity::should_reuse_early_desktop(
                 just_collected,
                 early_desktop.as_ref(),
             ) {
@@ -215,6 +215,28 @@ pub fn run(args: &[String]) -> StdExitCode {
                 )
                 .await
             };
+            // Fonte de verdade do extrato: se a leitura escolhida não trouxe a
+            // seção do dia (ledger), tenta uma leitura fresca única para exibir
+            // o valor real do check-in e das tarefas.
+            if desktop.as_ref().is_some_and(|data| !data.ledger_available) {
+                let state = page.storage_state().await.ok();
+                if let Some(fresh) = crate::checkin_parity::read_early_desktop(
+                    &*browser,
+                    state.as_ref(),
+                    Duration::from_millis(config.nav_timeout_short),
+                )
+                .await
+                {
+                    if fresh.ledger_available {
+                        ali_coins_core::logging::global().info(
+                            "Extrato do dia obtido em leitura fresca (ledger indisponível na anterior).",
+                            &[],
+                        );
+                        desktop = Some(fresh);
+                    }
+                }
+            }
+            let desktop = desktop;
             let was_already_collected_today =
                 desktop.as_ref().is_some_and(|data| data.has_checkin_today);
             let bonus_from_ledger = desktop.as_ref().and_then(|data| data.today_bonus_coins);

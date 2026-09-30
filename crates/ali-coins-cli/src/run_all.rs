@@ -334,16 +334,17 @@ pub fn run(args: &[String]) -> StdExitCode {
             let was_already_collected_today = desktop_after_checkin
                 .as_ref()
                 .is_some_and(|data| data.has_checkin_today);
-            let bonus_from_ledger = desktop_after_checkin
+            let bonus_from_ledger_checkin = desktop_after_checkin
                 .as_ref()
                 .and_then(|data| data.today_bonus_coins);
-            let checkin_coins_from_ledger = bonus_from_ledger.is_some_and(|value| value > 0);
+            let checkin_coins_from_ledger_checkin =
+                bonus_from_ledger_checkin.is_some_and(|value| value > 0);
             let already_collected =
                 (result.already_collected || was_already_collected_today) && !just_collected;
             let confirmed_by_ledger = crate::checkin_parity::should_confirm_checkin_by_ledger(
                 just_collected,
                 already_collected,
-                checkin_coins_from_ledger,
+                checkin_coins_from_ledger_checkin,
             );
             let resolved = crate::checkin_parity::resolve_streak(
                 result.streak_days,
@@ -358,7 +359,7 @@ pub fn run(args: &[String]) -> StdExitCode {
             );
             let streak_days = crate::checkin_parity::resolved_streak_number(&resolved);
             let streak_value = resolved.streak_days.clone();
-            let checkin_coins = if let Some(bonus) = bonus_from_ledger {
+            let checkin_coins_estimate = if let Some(bonus) = bonus_from_ledger_checkin {
                 Some(bonus)
             } else if !already_collected && (just_collected || confirmed_by_ledger) {
                 Some(checkin_coins_from_streak(Some(&streak_value)))
@@ -377,7 +378,7 @@ pub fn run(args: &[String]) -> StdExitCode {
                 .or(mobile_balance);
             let balance_after_checkin = crate::checkin_parity::sync_balance_after_checkin(
                 just_collected,
-                checkin_coins,
+                checkin_coins_estimate,
                 raw_balance.as_deref(),
                 early_desktop
                     .as_ref()
@@ -456,6 +457,7 @@ pub fn run(args: &[String]) -> StdExitCode {
                 .or(mobile_balance);
             let missions_from_ledger = desktop_after_tasks
                 .as_ref()
+                .filter(|data| data.today_missions_count > 0)
                 .and_then(|data| data.today_missions_coins);
             let tasks_coins_from_ledger = missions_from_ledger.is_some();
             #[allow(clippy::cast_precision_loss)]
@@ -467,6 +469,20 @@ pub fn run(args: &[String]) -> StdExitCode {
             });
 
             // ----- ETAPA 3/3: relatório consolidado + notificação única -----
+            // Fonte de verdade do extrato desktop: o bônus do check-in pode não
+            // ter vindo na leitura pós-check-in (reutilizada); a leitura final
+            // (após as tarefas) completa o valor creditado hoje.
+            let bonus_from_ledger = bonus_from_ledger_checkin.or_else(|| {
+                desktop_after_tasks
+                    .as_ref()
+                    .and_then(|data| data.today_bonus_coins)
+            });
+            let checkin_coins_from_ledger = bonus_from_ledger.is_some_and(|value| value > 0);
+            let checkin_coins = if let Some(bonus) = bonus_from_ledger {
+                Some(bonus)
+            } else {
+                checkin_coins_estimate
+            };
             let checkin_input = CheckinInput {
                 already_collected: Some(already_collected),
                 coins_gained_today: checkin_coins.map(|value| value.to_string()),
