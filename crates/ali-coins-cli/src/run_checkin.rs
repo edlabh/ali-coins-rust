@@ -248,6 +248,51 @@ pub fn run(args: &[String]) -> StdExitCode {
                 already_collected,
                 checkin_coins_from_ledger,
             );
+            // Confirmação da quebra de streak pelo extrato (leitura fresca quando
+            // a tela lê 1 com histórico anterior > 1 e o extrato ainda não veio).
+            let mut statement_streak = desktop
+                .as_ref()
+                .and_then(|data| data.desktop_streak);
+            if crate::checkin_parity::should_confirm_streak_by_statement(
+                result.streak_days,
+                previous_streak_days,
+                statement_streak,
+                already_collected,
+            ) {{
+                logging::global().warn(
+                    "Leitura de streak = 1 com histórico anterior > 1; confirmando a quebra pelo extrato desktop...",
+                    &[],
+                );
+                let state = page.storage_state().await.ok();
+                if let Some(confirm_read) = crate::checkin_parity::read_early_desktop(
+                    &*browser,
+                    state.as_ref(),
+                    Duration::from_millis(config.nav_timeout_short),
+                )
+                .await
+                {{
+                    if confirm_read.desktop_streak.is_some() {{
+                        statement_streak = confirm_read.desktop_streak;
+                    }}
+                    if statement_streak.is_some_and(|value| value > 1) {{
+                        logging::global().info(
+                            "Extrato desmente a quebra (sequência do extrato > 1); preservando o streak real.",
+                            &[],
+                        );
+                    }} else {{
+                        logging::global().warn(
+                            "Extrato não desmente a quebra (sequência do extrato <= 1 ou indisponível).",
+                            &[],
+                        );
+                    }}
+                }} else {{
+                    logging::global().warn(
+                        "Falha ao confirmar a quebra de streak pelo extrato; mantendo a leitura da tela.",
+                        &[],
+                    );
+                }}
+            }}
+
             let resolved = crate::checkin_parity::resolve_streak(
                 result.streak_days,
                 previous_streak_days,
@@ -255,7 +300,7 @@ pub fn run(args: &[String]) -> StdExitCode {
                 just_collected,
                 already_collected,
                 confirmed_by_ledger,
-                desktop.as_ref().and_then(|data| data.desktop_streak),
+                statement_streak,
             );
             let streak_days = crate::checkin_parity::resolved_streak_number(&resolved);
             let streak_value = resolved.streak_days.clone();
@@ -426,7 +471,16 @@ pub fn run(args: &[String]) -> StdExitCode {
                         version: Some(env!("CARGO_PKG_VERSION")),
                         ..TelegramContext::default()
                     };
-                    let message = build_message(TelegramEvent::Failure, &context);
+                    // Eventos dedicados como no oráculo (2FA/captcha/falha genérica).
+                    let telegram_event = if error.contains("2FA") || error.contains("não-interativa")
+                    {
+                        TelegramEvent::TwoFactorRequired
+                    } else if error.to_lowercase().contains("captcha") {
+                        TelegramEvent::CaptchaRequired
+                    } else {
+                        TelegramEvent::Failure
+                    };
+                    let message = build_message(telegram_event, &context);
                     runtime.block_on(async {
                         if let Ok(client) =
                             SafeHttpClient::new(config.allow_private_webhooks, timeout)

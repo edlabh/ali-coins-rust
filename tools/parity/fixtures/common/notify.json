@@ -1,0 +1,108 @@
+{
+  "generator": "tools/parity/node/gen_notify.mjs",
+  "now": "2026-09-30T15:00:00.000Z",
+  "host": "vm-ali-rust",
+  "version": "1.7.1",
+  "cases": [
+    {
+      "name": "dry_run",
+      "event": "dry_run",
+      "error": null,
+      "user": null,
+      "previousStreakDays": null,
+      "streakDays": null,
+      "totalBalance": null,
+      "message": "🧪 <b>AliExpress Moedas - Teste Dry-Run</b>\n\nA validação de ambiente e credenciais foi concluída com sucesso!\n📅 <b>Data:</b> 30/09/2026 08:00:00\n🖥️ <b>Host:</b> <code>vm-ali-rust (v1.7.1)</code>\n🔔 <b>Notificações Telegram:</b> Operacionais e ativas"
+    },
+    {
+      "name": "manual_test",
+      "event": "manual_test",
+      "error": null,
+      "user": null,
+      "previousStreakDays": null,
+      "streakDays": null,
+      "totalBalance": null,
+      "message": "🔔 <b>AliExpress Moedas - Teste de Notificação Telegram</b>\n\nSe você está lendo esta mensagem, o bot do Telegram foi configurado com sucesso e está operando perfeitamente! 🎉\n📅 <b>Data:</b> 30/09/2026 08:00:00\n🖥️ <b>Host:</b> <code>vm-ali-rust (v1.7.1)</code>"
+    },
+    {
+      "name": "lock_active_com_erro",
+      "event": "lock_active",
+      "error": "Outra instância mantém o lock para ed***@gmail.com.",
+      "user": null,
+      "previousStreakDays": null,
+      "streakDays": null,
+      "totalBalance": null,
+      "message": "⚠️ <b>AliExpress Moedas - Execução Bloqueada (Lock Ativo)</b>\nOutra instância da automação já está em execução no host. A execução atual foi finalizada para evitar sobreposição.\nℹ️ <i>Outra instância mantém o lock para ed***@gmail.com.</i>\n📅 <b>Data:</b> 30/09/2026 08:00:00\n🖥️ <b>Host:</b> <code>vm-ali-rust (v1.7.1)</code>"
+    },
+    {
+      "name": "lock_active_sem_erro",
+      "event": "lock_active",
+      "error": null,
+      "user": null,
+      "previousStreakDays": null,
+      "streakDays": null,
+      "totalBalance": null,
+      "message": "⚠️ <b>AliExpress Moedas - Execução Bloqueada (Lock Ativo)</b>\nOutra instância da automação já está em execução no host. A execução atual foi finalizada para evitar sobreposição.\n📅 <b>Data:</b> 30/09/2026 08:00:00\n🖥️ <b>Host:</b> <code>vm-ali-rust (v1.7.1)</code>"
+    },
+    {
+      "name": "failure_simples",
+      "event": "failure",
+      "error": "Falha na execução: Request timed out",
+      "user": null,
+      "previousStreakDays": null,
+      "streakDays": null,
+      "totalBalance": null,
+      "message": "🔴 ali-coins — 30/09/2026 08:00:00\n⚠️ <b>Erro:</b> <code>Falha na execução: Request timed out</code>\n🖥️ <b>Host:</b> <code>vm-ali-rust (v1.7.1)</code>"
+    },
+    {
+      "name": "failure_com_segredo",
+      "event": "failure",
+      "error": "GET https://x/y?token=abc123&session=zzz falhou",
+      "user": null,
+      "previousStreakDays": null,
+      "streakDays": null,
+      "totalBalance": null,
+      "message": "🔴 ali-coins — 30/09/2026 08:00:00\n⚠️ <b>Erro:</b> <code>GET https://x/y?token=[REDACTED]&amp;session=[REDACTED] falhou</code>\n🖥️ <b>Host:</b> <code>vm-ali-rust (v1.7.1)</code>"
+    },
+    {
+      "name": "streak_break",
+      "event": "streak_break",
+      "error": null,
+      "user": "ed***@gmail.com",
+      "previousStreakDays": 226,
+      "streakDays": 1,
+      "totalBalance": "150 moedas",
+      "message": "🚨 <b>STREAK QUEBRADO</b> — 30/09/2026 08:00:00\n\n⚠️ <b>Atenção:</b> A sequência diária de check-in foi interrompida ou resetada!\n👤 <b>Conta:</b> <code>ed***@gmail.com</code>\n🖥️ <b>Host:</b> <code>vm-ali-rust (v1.7.1)</code>\n📉 <b>Ontem:</b> 226 dias ➔ <b>Hoje:</b> 1 dias\n💰 <b>Saldo Atual:</b> 150 moedas"
+    },
+    {
+      "name": "2fa_required",
+      "event": "2fa_required",
+      "error": null,
+      "user": null,
+      "previousStreakDays": null,
+      "streakDays": null,
+      "totalBalance": null,
+      "message": "🔐 <b>AliExpress Moedas - Verificação 2FA Solicitada</b> — 30/09/2026 08:00:00\n\n🖥️ <b>Host:</b> <code>vm-ali-rust (v1.7.1)</code>\n\n⚠️ <b>Execução Não-Interativa (Cron / CI):</b>\nO AliExpress solicitou verificação 2FA (e-mail ou SMS) e a automação foi finalizada em &lt;5s para evitar travamento.\n\n💡 <b>Guia de Resolução (2FA no Cron):</b>\n1. Execute localmente no seu computador: <code>./run_all.sh</code>\n2. Digite o código de 6 dígitos quando solicitado no terminal.\n3. Exporte a nova sessão gerada: <code>node export_session.js</code>\n4. Importe a sessão no servidor: <code>node import_session.js &lt; session_token.txt</code>"
+    },
+    {
+      "name": "captcha_required",
+      "event": "captcha_required",
+      "error": "Captcha solicitado durante o login (code=abcd)",
+      "user": null,
+      "previousStreakDays": null,
+      "streakDays": null,
+      "totalBalance": null,
+      "message": "🤖 ali-coins — 30/09/2026 08:00:00\n⚠️ <b>Desafio anti-bot (captcha) detectado no login</b>\n🖥️ <b>Host:</b> <code>vm-ali-rust (v1.7.1)</code>\n\nℹ️ <i>Captcha solicitado durante o login (code=abcd)</i>\n\n💡 <b>Ação:</b> renove a sessão localmente (rede residencial) e importe com <code>node import_session.js</code>. Novas tentativas de login ficam pausadas pelo cooldown (<code>CAPTCHA_COOLDOWN_HOURS</code>)."
+    },
+    {
+      "name": "captcha_cooldown_released",
+      "event": "captcha_cooldown_released",
+      "error": null,
+      "user": null,
+      "previousStreakDays": null,
+      "streakDays": null,
+      "totalBalance": null,
+      "message": "🤖 ali-coins — 30/09/2026 08:00:00\n✅ <b>Cooldown pós-captcha liberado</b>\n🖥️ <b>Host:</b> <code>vm-ali-rust (v1.7.1)</code>\n\nA janela de pausa expirou; a automação voltará a tentar o login normalmente."
+    }
+  ]
+}
