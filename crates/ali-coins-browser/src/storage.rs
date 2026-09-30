@@ -77,18 +77,35 @@ pub async fn read_storage_state(
 
     let mut origins = Vec::new();
     for origin in merge_origins(visited_origins, current_origin) {
-        let entries = page
-            .execute(GetDomStorageItemsParams::new(local_storage_id(&origin)?))
-            .await
-            .map_err(|err| BrowserError::Evaluate(err.to_string()))?;
-        let items: Vec<Value> = entries
-            .entries
-            .iter()
-            .filter_map(|item| {
-                let pair = item.inner();
-                (pair.len() >= 2).then(|| serde_json::json!({ "name": pair[0], "value": pair[1] }))
-            })
-            .collect();
+        let items: Vec<Value> = if Some(origin.as_str()) == current_origin {
+            // Origin atual: leitura direta pelo JS da própria página (robusta).
+            let entries_result = page
+                .evaluate_expression(
+                    "Object.entries(localStorage).map(([name, value]) => ({ name, value }))",
+                )
+                .await
+                .map_err(|err| BrowserError::Evaluate(err.to_string()))?;
+            let entries_value: Value = entries_result.into_value().unwrap_or(Value::Null);
+            entries_value.as_array().cloned().unwrap_or_default()
+        } else {
+            // Demais origins visitados: DOMStorage (best-effort — o origin de
+            // outra página/aba pode não ter frame neste target CDP).
+            match page
+                .execute(GetDomStorageItemsParams::new(local_storage_id(&origin)?))
+                .await
+            {
+                Ok(entries) => entries
+                    .entries
+                    .iter()
+                    .filter_map(|item| {
+                        let pair = item.inner();
+                        (pair.len() >= 2)
+                            .then(|| serde_json::json!({ "name": pair[0], "value": pair[1] }))
+                    })
+                    .collect(),
+                Err(_) => continue,
+            }
+        };
         origins.push(serde_json::json!({
             "origin": origin,
             "localStorage": items,
