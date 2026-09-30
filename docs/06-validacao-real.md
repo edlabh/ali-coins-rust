@@ -286,6 +286,14 @@ desktop, tanto no check-in quanto nas tarefas (como o oráculo):
   (`alreadyCollected=false`, `streakDays 3→4`) e o saldo pós-check-in foi
   sincronizado (`1128`) enquanto o extrato não refletia o crédito.
 
+## Heartbeat na CLI (30/09/2026)
+
+O comando `all` passou a enviar o **dead man's switch** como o `all.js`:
+`start` (após o lock), `success` (com o payload do relatório), `fail` (lock
+ativo, erro de lock e falhas gerais) e `fail` no streak quebrado antes do
+exit 4. Envio best-effort, respeitando `HEARTBEAT_ENABLED`/`HEARTBEAT_URL`
+(na VM não está configurado — sem impacto no cron atual).
+
 ## D-02/D-08 — Telegram byte-a-byte e streak quebrado (30/09/2026)
 
 - **D-02**: eventos de produção do Telegram portados byte-a-byte

@@ -7,8 +7,8 @@ use ali_coins_browser::driver::{BrowserDriver as _, LaunchOptions, NavOptions};
 use ali_coins_browser::launch::{ChromiumArgsInput, build_chromium_args, pixel7_profile};
 use ali_coins_core::lock::{LockError, LockOptions, acquire};
 use ali_coins_core::notify::{
-    SafeHttpClient, TelegramConfig, TelegramContext, TelegramEvent, build_message,
-    build_unified_report_message, send_telegram,
+    HeartbeatAction, HeartbeatConfig, SafeHttpClient, TelegramConfig, TelegramContext,
+    TelegramEvent, build_message, build_unified_report_message, send_heartbeat, send_telegram,
 };
 use ali_coins_core::report::{
     CheckinInput, NumOrText, TasksInput, UnifiedMeta, build_unified_report_payload,
@@ -138,6 +138,71 @@ async fn send_unified_notification(
     send_message(config, account, &message).await;
 }
 
+/// Envia um heartbeat (best-effort), como o `all.js`.
+async fn send_heartbeat_action(
+    config: &ali_coins_core::config::Config,
+    action: HeartbeatAction,
+    payload: Option<&str>,
+) {
+    if !config.heartbeat_enabled || config.heartbeat_url.trim().is_empty() {
+        return;
+    }
+    let timeout = Duration::from_millis(config.heartbeat_timeout_ms);
+    let Ok(client) = SafeHttpClient::new(config.allow_private_webhooks, timeout) else {
+        return;
+    };
+    let heartbeat = HeartbeatConfig {
+        enabled: true,
+        url: config.heartbeat_url.clone(),
+        timeout_ms: config.heartbeat_timeout_ms,
+    };
+    let host = notify_host(config);
+    let result = send_heartbeat(&client, action, &heartbeat, &host, payload).await;
+    if result.ok {
+        logging::global().info("Heartbeat enviado.", &[]);
+    } else if !result.skipped {
+        logging::global().warn(
+            &format!(
+                "Falha no heartbeat: {}",
+                result
+                    .error
+                    .unwrap_or_else(|| "erro desconhecido".to_string())
+            ),
+            &[],
+        );
+    }
+}
+
+/// Falha de lock: heartbeat + Telegram (`lock_active`/`failure`), como o `all.js`.
+fn notify_lock_failure(
+    config: &ali_coins_core::config::Config,
+    account: &ali_coins_core::config::Account,
+    error: &str,
+    active: bool,
+) {
+    let Ok(runtime) = tokio::runtime::Runtime::new() else {
+        return;
+    };
+    runtime.block_on(async {
+        send_heartbeat_action(config, HeartbeatAction::Fail, Some(error)).await;
+        let host = notify_host(config);
+        let context = TelegramContext {
+            user: Some(account.masked_user.as_str()),
+            error: Some(error),
+            host: Some(host.as_str()),
+            version: Some(env!("CARGO_PKG_VERSION")),
+            ..TelegramContext::default()
+        };
+        let event = if active {
+            TelegramEvent::LockActive
+        } else {
+            TelegramEvent::Failure
+        };
+        let message = build_message(event, &context);
+        send_message(config, account, &message).await;
+    });
+}
+
 /// `ali-coins all [--account <id>] [--json] [--force]`
 pub fn run(args: &[String]) -> StdExitCode {
     let json = has_flag(args, "--json");
@@ -198,10 +263,13 @@ pub fn run(args: &[String]) -> StdExitCode {
         Ok(guard) => guard,
         Err(LockError::Active { message, .. }) => {
             logging::global().warn(&message, &[]);
+            notify_lock_failure(&config, account, &message, true);
             return StdExitCode::from(3);
         }
         Err(error) => {
-            logging::global().error(&format!("Falha ao adquirir o lock: {error}"), &[]);
+            let message = format!("Falha ao adquirir o lock: {error}");
+            logging::global().error(&message, &[]);
+            notify_lock_failure(&config, account, &message, false);
             return StdExitCode::from(1);
         }
     };
@@ -216,6 +284,9 @@ pub fn run(args: &[String]) -> StdExitCode {
 
     runtime
         .block_on(async {
+            // Dead man's switch: sinal de início (paridade all.js).
+            send_heartbeat_action(&config, HeartbeatAction::Start, None).await;
+
             let session_options = SessionOptions {
                 base_dir: Some(base_dir.clone()),
                 session_path: Some(account.session_path.clone()),
@@ -660,16 +731,31 @@ pub fn run(args: &[String]) -> StdExitCode {
             }
 
             if streak_broken {
+                send_heartbeat_action(
+                    &config,
+                    HeartbeatAction::Fail,
+                    Some(&format!(
+                        "Streak quebrado: ontem {previous_streak_days:?} dias -> hoje {streak_days:?} dias"
+                    )),
+                )
+                .await;
                 Ok(ExitCode::StreakBroken.as_i32())
-            } else if had_new_checkin || had_task_actions {
-                Ok(ExitCode::Success.as_i32())
             } else {
-                Ok(ExitCode::NoAction.as_i32())
+                let payload_json = serde_json::to_string(&payload).unwrap_or_default();
+                send_heartbeat_action(&config, HeartbeatAction::Success, Some(&payload_json)).await;
+                if had_new_checkin || had_task_actions {
+                    Ok(ExitCode::Success.as_i32())
+                } else {
+                    Ok(ExitCode::NoAction.as_i32())
+                }
             }
         })
         .map_or_else(
             |error: String| {
                 // Notifica a falha (best-effort) antes de sair.
+                runtime.block_on(async {
+                    send_heartbeat_action(&config, HeartbeatAction::Fail, Some(&error)).await;
+                });
                 if config.telegram_enabled {
                     let timeout = Duration::from_millis(config.telegram_timeout_ms);
                     let host = notify_host(&config);
