@@ -189,7 +189,10 @@ pub fn run(args: &[String]) -> StdExitCode {
                 Duration::from_millis(config.nav_timeout_short),
             )
             .await;
-            let missions_from_ledger = desktop.as_ref().and_then(|data| data.today_missions_coins);
+            let missions_from_ledger = desktop
+                .as_ref()
+                .filter(|data| data.today_missions_count > 0)
+                .and_then(|data| data.today_missions_coins);
             let final_balance = desktop.as_ref().and_then(|data| data.total_balance.clone());
 
             let results: Vec<serde_json::Value> = run
