@@ -286,6 +286,24 @@ desktop, tanto no check-in quanto nas tarefas (como o oráculo):
   (`alreadyCollected=false`, `streakDays 3→4`) e o saldo pós-check-in foi
   sincronizado (`1128`) enquanto o extrato não refletia o crédito.
 
+## Multi-conta sequencial (30/09/2026) — validado apenas com mocks
+
+Implementado o modo multi-conta do `all` (paridade com o fluxo multi do
+`all.js`), **sem nenhuma execução em contas reais** (decisão do operador):
+
+- Orquestração pura e testável: `MultiFlags` (sucesso/ação nova/streak/2FA/
+  captcha/lock/falhas), seleção de evento e exit code agregados (3 todas
+  bloqueadas, 4 streak, 5 2FA, 1 falha, 2 sem ação, 0 sucesso).
+- Execução: contas em sequência, cada uma em processo filho
+  (`all --account <user> --json`, isolamento de lock/sessão/browser do fluxo
+  de conta única), com backoff exponencial com jitter + pausa aleatória
+  (`ACCOUNT_DELAY_MIN/MAX_MS`) composta pela maior espera.
+- Agregação: `build_multi_account_report_payload` + mensagem consolidada
+  **byte-a-byte** com o oráculo (`buildMultiAccountMessage`; fixtures
+  `multi_success`, `multi_failure`, `multi_already_collected`).
+- Testes (sem contas reais): flags/event/exit, sequência e isolamento do loop
+  com runner fake, extração do relatório do stdout e agregação do payload.
+
 ## D-05 — localStorage multi-origin (30/09/2026)
 
 `storage_state` agora rastreia os origins http(s) visitados por **qualquer

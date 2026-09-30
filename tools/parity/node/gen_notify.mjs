@@ -83,6 +83,88 @@ push('captcha_required', 'captcha_required', {
 });
 push('captcha_cooldown_released', 'captcha_cooldown_released');
 
+// Casos multi-conta (payload montado pelo builder do oráculo).
+const report = require(path.join(ref, 'libs', 'report.js'));
+const accountResults = [
+  {
+    account: { maskedUser: 'conta1***@gmail.com' },
+    checkinResult: {
+      alreadyCollected: false,
+      coinsGainedToday: '40',
+      streakDays: 226,
+      totalBalance: '150',
+      duration: '1m 20s'
+    },
+    tasksResult: { coinsGained: 46, finalCoins: '196 moedas', duration: '5m 10s' },
+    startTime: '2026-09-30T14:50:00.000Z',
+    endTime: '2026-09-30T14:56:30.000Z'
+  },
+  {
+    account: { maskedUser: 'conta2***@gmail.com' },
+    checkinResult: {
+      alreadyCollected: true,
+      streakDays: 12,
+      totalBalance: '88',
+      duration: '1m 02s'
+    },
+    tasksResult: { coinsGained: 0, finalCoins: '88 moedas', duration: '2m 00s' },
+    startTime: '2026-09-30T14:57:00.000Z',
+    endTime: '2026-09-30T15:00:00.000Z',
+    nextAccountAt: null
+  }
+];
+const multiMeta = {
+  mainStartTime: new Date('2026-09-30T14:50:00.000Z'),
+  mainEndTime: new Date('2026-09-30T15:00:00.000Z'),
+  totalDuration: '10m 00s'
+};
+const multiSuccessReport = report.buildMultiAccountReportPayload(accountResults, multiMeta);
+cases.push({
+  name: 'multi_success',
+  event: 'success',
+  error: null,
+  report: multiSuccessReport,
+  message: notify.buildMessage({ report: multiSuccessReport, event: 'success', hostname: HOST })
+});
+const multiFailureReport = report.buildMultiAccountReportPayload(
+  [
+    accountResults[0],
+    { account: { maskedUser: 'conta2***@gmail.com' }, error: 'Falha na navegação: timeout' }
+  ],
+  multiMeta
+);
+cases.push({
+  name: 'multi_failure',
+  event: 'failure',
+  error: 'Falha na navegação: timeout',
+  report: multiFailureReport,
+  message: notify.buildMessage({
+    report: multiFailureReport,
+    event: 'failure',
+    error: 'Falha na navegação: timeout',
+    hostname: HOST
+  })
+});
+const multiAlreadyReport = report.buildMultiAccountReportPayload(
+  [
+    {
+      account: { maskedUser: 'conta1***@gmail.com' },
+      checkinResult: { alreadyCollected: true, streakDays: 226, totalBalance: '150', duration: '1m 20s' },
+      tasksResult: { coinsGained: 0, finalCoins: '150 moedas', duration: '2m 00s' },
+      startTime: '2026-09-30T14:50:00.000Z',
+      endTime: '2026-09-30T14:53:20.000Z'
+    }
+  ],
+  multiMeta
+);
+cases.push({
+  name: 'multi_already_collected',
+  event: 'already_collected',
+  error: null,
+  report: multiAlreadyReport,
+  message: notify.buildMessage({ report: multiAlreadyReport, event: 'already_collected', hostname: HOST })
+});
+
 const payload = {
   generator: 'tools/parity/node/gen_notify.mjs',
   now: FIXED_NOW.toISOString(),

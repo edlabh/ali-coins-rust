@@ -103,6 +103,172 @@
       "streakDays": null,
       "totalBalance": null,
       "message": "🤖 ali-coins — 30/09/2026 08:00:00\n✅ <b>Cooldown pós-captcha liberado</b>\n🖥️ <b>Host:</b> <code>vm-ali-rust (v1.7.1)</code>\n\nA janela de pausa expirou; a automação voltará a tentar o login normalmente."
+    },
+    {
+      "name": "multi_success",
+      "event": "success",
+      "error": null,
+      "report": {
+        "type": "multi_account_report",
+        "accounts": [
+          {
+            "user": "conta1***@gmail.com",
+            "checkin": {
+              "alreadyCollected": false,
+              "coinsGainedToday": "40",
+              "streakDays": 226,
+              "totalBalance": "150",
+              "duration": "1m 20s"
+            },
+            "tasks": {
+              "coinsGained": 46,
+              "finalCoins": "196 moedas",
+              "duration": "5m 10s"
+            },
+            "isImportedSessionExpired": false,
+            "startTime": "2026-09-30T14:50:00.000Z",
+            "endTime": "2026-09-30T14:56:30.000Z",
+            "duration": "6m 30s",
+            "meta": {
+              "finalBalance": "196 moedas",
+              "totalCoinsGained": 86,
+              "checkinCoinsGained": 40,
+              "tasksCoinsGained": 46
+            }
+          },
+          {
+            "user": "conta2***@gmail.com",
+            "checkin": {
+              "alreadyCollected": true,
+              "streakDays": 12,
+              "totalBalance": "88",
+              "duration": "1m 02s"
+            },
+            "tasks": {
+              "coinsGained": 0,
+              "finalCoins": "88 moedas",
+              "duration": "2m 00s"
+            },
+            "isImportedSessionExpired": false,
+            "startTime": "2026-09-30T14:57:00.000Z",
+            "endTime": "2026-09-30T15:00:00.000Z",
+            "nextAccountAt": null,
+            "duration": "3m 00s",
+            "meta": {
+              "finalBalance": "88 moedas",
+              "totalCoinsGained": 0,
+              "checkinCoinsGained": 0,
+              "tasksCoinsGained": 0
+            }
+          }
+        ],
+        "meta": {
+          "startTime": "2026-09-30T14:50:00.000Z",
+          "endTime": "2026-09-30T15:00:00.000Z",
+          "totalDuration": "10m 00s",
+          "totalAccounts": 2,
+          "successfulAccounts": 2
+        }
+      },
+      "message": "✅ <b>AliExpress Moedas - Multi-Conta (Sucesso) — 30/09/2026</b>\n📊 <b>Resumo:</b> 2/2 contas processadas com sucesso\n\n[1] <code>conta1***@gmail.com</code>: 💰 <b>196 moedas</b> | 🪙 +86 (+40/+46) | Streak: 226 dias\n[2] <code>conta2***@gmail.com</code>: 💰 <b>88 moedas</b> | 🪙 +0 (+0/+0) | Streak: 12 dias\n\n📅 <b>Agenda:</b>\n[1] <code>conta1***@gmail.com</code>: 07:50:00 → 07:56:30 (última)\n[2] <code>conta2***@gmail.com</code>: 07:57:00 → 08:00:00 (última)\n\n⏱️ <b>Duração Total:</b> 10m 00s\n📅 <b>Data:</b> 30/09/2026 08:00:00\n🖥️ <b>Host:</b> <code>vm-ali-rust (v1.7.1)</code>"
+    },
+    {
+      "name": "multi_failure",
+      "event": "failure",
+      "error": "Falha na navegação: timeout",
+      "report": {
+        "type": "multi_account_report",
+        "accounts": [
+          {
+            "user": "conta1***@gmail.com",
+            "checkin": {
+              "alreadyCollected": false,
+              "coinsGainedToday": "40",
+              "streakDays": 226,
+              "totalBalance": "150",
+              "duration": "1m 20s"
+            },
+            "tasks": {
+              "coinsGained": 46,
+              "finalCoins": "196 moedas",
+              "duration": "5m 10s"
+            },
+            "isImportedSessionExpired": false,
+            "startTime": "2026-09-30T14:50:00.000Z",
+            "endTime": "2026-09-30T14:56:30.000Z",
+            "duration": "6m 30s",
+            "meta": {
+              "finalBalance": "196 moedas",
+              "totalCoinsGained": 86,
+              "checkinCoinsGained": 40,
+              "tasksCoinsGained": 46
+            }
+          },
+          {
+            "user": "conta2***@gmail.com",
+            "checkin": null,
+            "tasks": null,
+            "error": "Falha na navegação: timeout",
+            "isImportedSessionExpired": false,
+            "meta": {
+              "finalBalance": "N/D",
+              "totalCoinsGained": 0,
+              "checkinCoinsGained": 0,
+              "tasksCoinsGained": 0
+            }
+          }
+        ],
+        "meta": {
+          "startTime": "2026-09-30T14:50:00.000Z",
+          "endTime": "2026-09-30T15:00:00.000Z",
+          "totalDuration": "10m 00s",
+          "totalAccounts": 2,
+          "successfulAccounts": 1
+        }
+      },
+      "message": "🔴 <b>AliExpress Moedas - Multi-Conta (Falha) — 30/09/2026</b>\n📊 <b>Resumo:</b> 1/2 contas processadas com sucesso\n\n[1] <code>conta1***@gmail.com</code>: 💰 <b>196 moedas</b> | 🪙 +86 (+40/+46) | Streak: 226 dias\n[2] <code>conta2***@gmail.com</code>: ❌ Falha (Falha na navegação: timeout)\n\n📅 <b>Agenda:</b>\n[1] <code>conta1***@gmail.com</code>: 07:50:00 → 07:56:30 (última)\n\n⏱️ <b>Duração Total:</b> 10m 00s\n📅 <b>Data:</b> 30/09/2026 08:00:00\n🖥️ <b>Host:</b> <code>vm-ali-rust (v1.7.1)</code>"
+    },
+    {
+      "name": "multi_already_collected",
+      "event": "already_collected",
+      "error": null,
+      "report": {
+        "type": "multi_account_report",
+        "accounts": [
+          {
+            "user": "conta1***@gmail.com",
+            "checkin": {
+              "alreadyCollected": true,
+              "streakDays": 226,
+              "totalBalance": "150",
+              "duration": "1m 20s"
+            },
+            "tasks": {
+              "coinsGained": 0,
+              "finalCoins": "150 moedas",
+              "duration": "2m 00s"
+            },
+            "isImportedSessionExpired": false,
+            "startTime": "2026-09-30T14:50:00.000Z",
+            "endTime": "2026-09-30T14:53:20.000Z",
+            "duration": "3m 20s",
+            "meta": {
+              "finalBalance": "150 moedas",
+              "totalCoinsGained": 0,
+              "checkinCoinsGained": 0,
+              "tasksCoinsGained": 0
+            }
+          }
+        ],
+        "meta": {
+          "startTime": "2026-09-30T14:50:00.000Z",
+          "endTime": "2026-09-30T15:00:00.000Z",
+          "totalDuration": "10m 00s",
+          "totalAccounts": 1,
+          "successfulAccounts": 1
+        }
+      },
+      "message": "ℹ️ <b>AliExpress Moedas - Multi-Conta (Já Coletado) — 30/09/2026</b>\n📊 <b>Resumo:</b> 1/1 contas processadas com sucesso\n\n[1] <code>conta1***@gmail.com</code>: 💰 <b>150 moedas</b> | 🪙 +0 (+0/+0) | Streak: 226 dias\n\n📅 <b>Agenda:</b>\n[1] <code>conta1***@gmail.com</code>: 07:50:00 → 07:53:20 (última)\n\n⏱️ <b>Duração Total:</b> 10m 00s\n📅 <b>Data:</b> 30/09/2026 08:00:00\n🖥️ <b>Host:</b> <code>vm-ali-rust (v1.7.1)</code>"
     }
   ]
 }

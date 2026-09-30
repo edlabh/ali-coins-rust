@@ -42,7 +42,7 @@ fn flag_value<'a>(args: &'a [String], name: &str) -> Option<&'a str> {
 }
 
 /// O atraso inicial deve ser aplicado? (paridade `shouldApplyStartDelay` do oráculo)
-fn should_apply_start_delay(no_delay: bool, max_ms: u64) -> bool {
+pub(crate) fn should_apply_start_delay(no_delay: bool, max_ms: u64) -> bool {
     !no_delay && max_ms > 0
 }
 
@@ -55,7 +55,7 @@ fn random_fraction() -> f64 {
 }
 
 /// Rótulo de host exibido nas notificações (`NOTIFY_HOST_LABEL` > hostname).
-fn notify_host(config: &ali_coins_core::config::Config) -> String {
+pub(crate) fn notify_host(config: &ali_coins_core::config::Config) -> String {
     if config.notify_host_label.trim().is_empty() {
         ali_coins_core::lock::hostname()
     } else {
@@ -87,7 +87,7 @@ fn balance_diff(initial: Option<&str>, final_value: Option<&str>) -> Option<f64>
 }
 
 /// Envia uma mensagem já montada (best-effort).
-async fn send_message(
+pub(crate) async fn send_message(
     config: &ali_coins_core::config::Config,
     account: &ali_coins_core::config::Account,
     message: &str,
@@ -139,7 +139,7 @@ async fn send_unified_notification(
 }
 
 /// Envia um heartbeat (best-effort), como o `all.js`.
-async fn send_heartbeat_action(
+pub(crate) async fn send_heartbeat_action(
     config: &ali_coins_core::config::Config,
     action: HeartbeatAction,
     payload: Option<&str>,
@@ -209,6 +209,10 @@ pub fn run(args: &[String]) -> StdExitCode {
     let Some((base_dir, env, config, accounts)) = bootstrap() else {
         return StdExitCode::from(1);
     };
+    // Modo multi-conta (Fase 5): mais de uma conta configurada ou `--all` explícito.
+    if accounts.len() > 1 || has_flag(args, "--all") {
+        return crate::run_multi::run(args);
+    }
     let account = if let Some(selector) = flag_value(args, "--account") {
         let parsed_index = selector.parse::<usize>().ok();
         let found = accounts.iter().find(|account| {

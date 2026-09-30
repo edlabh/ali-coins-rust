@@ -11,6 +11,7 @@ mod notify_test;
 mod report_render;
 mod run_all;
 mod run_checkin;
+mod run_multi;
 mod run_tasks;
 
 use ali_coins_core::config::{
