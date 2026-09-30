@@ -495,6 +495,242 @@ pub fn build_message_at(
     truncate_telegram_message(&body)
 }
 
+/// Converte `streakDays` (número ou texto) para o formato aceito por `to_safe_streak`.
+fn streak_value_text(value: Option<&Value>) -> Option<String> {
+    match value? {
+        Value::Number(number) => Some(number.to_string()),
+        Value::String(text) => Some(text.clone()),
+        _ => None,
+    }
+}
+
+/// Inteiro seguro do payload (número/string de dígitos; negativo → default).
+fn to_safe_int(value: Option<&Value>) -> i64 {
+    match value {
+        Some(Value::Number(number)) =>
+        {
+            #[allow(clippy::cast_possible_truncation)]
+            number
+                .as_f64()
+                .filter(|value| value.is_finite() && *value >= 0.0)
+                .map_or(0, |value| value.floor() as i64)
+        }
+        Some(Value::String(text)) => text
+            .trim()
+            .parse::<i64>()
+            .ok()
+            .filter(|value| *value >= 0)
+            .unwrap_or(0),
+        _ => 0,
+    }
+}
+
+/// Mensagem consolidada multi-conta (port de `buildMultiAccountMessage`).
+#[must_use]
+pub fn build_multi_account_message_at(
+    report: &Value,
+    event: TelegramEvent,
+    error: Option<&str>,
+    host: &str,
+    version: &str,
+    now: chrono::DateTime<chrono::Utc>,
+) -> String {
+    let (emoji, desc) = match event {
+        TelegramEvent::AlreadyCollected => ("ℹ️", "Já Coletado"),
+        TelegramEvent::Failure => ("🔴", "Falha"),
+        TelegramEvent::CaptchaRequired => ("🤖", "Captcha Solicitado"),
+        _ => ("✅", "Sucesso"),
+    };
+    let report_date = crate::time::format_date(now);
+    let safe_host = escape_html(&format!("{host} (v{version})"));
+    let meta = report.get("meta");
+
+    let mut lines = vec![
+        format!("{emoji} <b>AliExpress Moedas - Multi-Conta ({desc}) — {report_date}</b>"),
+        format!(
+            "📊 <b>Resumo:</b> {}/{} contas processadas com sucesso",
+            to_safe_int(meta.and_then(|meta| meta.get("successfulAccounts"))),
+            to_safe_int(meta.and_then(|meta| meta.get("totalAccounts")))
+        ),
+        String::new(),
+    ];
+
+    let accounts = report
+        .get("accounts")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    for (index, account) in accounts.iter().enumerate() {
+        let user = account.get("user").and_then(Value::as_str).unwrap_or("");
+        let user_masked = escape_html(user);
+        if let Some(error) = account.get("error").and_then(Value::as_str) {
+            lines.push(format!(
+                "[{}] <code>{user_masked}</code>: ❌ Falha ({})",
+                index + 1,
+                escape_html(&sanitize_sensitive_query_params(error))
+            ));
+            continue;
+        }
+
+        let checkin_value = account.get("checkin").filter(|value| !value.is_null());
+        let tasks_value = account.get("tasks").filter(|value| !value.is_null());
+        let checkin_input: Option<CheckinInput> =
+            checkin_value.and_then(|value| serde_json::from_value(value.clone()).ok());
+        let tasks_input: Option<TasksInput> =
+            tasks_value.and_then(|value| serde_json::from_value(value.clone()).ok());
+        let account_meta = account.get("meta");
+
+        let checkin_coins = account_meta
+            .and_then(|meta| meta.get("checkinCoinsGained"))
+            .map_or_else(
+                || compute_checkin_coins_gained(checkin_input.as_ref()),
+                |value| to_safe_int(Some(value)),
+            );
+        let tasks_coins = account_meta
+            .and_then(|meta| meta.get("tasksCoinsGained"))
+            .map_or_else(
+                || compute_tasks_coins_gained(tasks_input.as_ref(), checkin_input.as_ref()),
+                |value| to_safe_int(Some(value)),
+            );
+        let total_coins = account_meta
+            .and_then(|meta| meta.get("totalCoinsGained"))
+            .map_or(checkin_coins + tasks_coins, |value| {
+                to_safe_int(Some(value))
+            });
+        let streak = to_safe_streak(
+            streak_value_text(checkin_value.and_then(|checkin| checkin.get("streakDays")))
+                .as_deref(),
+        );
+        let balance = account_meta
+            .and_then(|meta| meta.get("finalBalance"))
+            .and_then(Value::as_str)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string)
+            .or_else(|| {
+                checkin_value
+                    .and_then(|checkin| checkin.get("totalBalance"))
+                    .and_then(Value::as_str)
+                    .map(|total| format!("{total} moedas"))
+            })
+            .unwrap_or_else(|| "N/D".to_string());
+
+        lines.push(format!(
+            "[{}] <code>{user_masked}</code>: 💰 <b>{}</b> | 🪙 +{total_coins} (+{checkin_coins}/+{tasks_coins}) | Streak: {}",
+            index + 1,
+            escape_html(&balance),
+            escape_html(&streak)
+        ));
+    }
+
+    let agenda: Vec<&Value> = accounts
+        .iter()
+        .filter(|account| {
+            account.get("startTime").is_some() || account.get("nextAccountAt").is_some()
+        })
+        .collect();
+    if !agenda.is_empty() {
+        lines.push(String::new());
+        lines.push("📅 <b>Agenda:</b>".to_string());
+        for (index, account) in agenda.iter().enumerate() {
+            let user = escape_html(account.get("user").and_then(Value::as_str).unwrap_or(""));
+            let inicio = account
+                .get("startTime")
+                .and_then(Value::as_str)
+                .and_then(parse_iso_clock)
+                .unwrap_or_else(|| "N/D".to_string());
+            let fim = account
+                .get("endTime")
+                .and_then(Value::as_str)
+                .and_then(parse_iso_clock)
+                .unwrap_or_else(|| "N/D".to_string());
+            let proxima = account
+                .get("nextAccountAt")
+                .and_then(Value::as_str)
+                .and_then(parse_iso_time)
+                .map_or_else(|| "última".to_string(), |time| format!("próxima: {time}"));
+            lines.push(format!(
+                "[{}] <code>{user}</code>: {inicio} → {fim} ({proxima})",
+                index + 1
+            ));
+        }
+    }
+
+    lines.push(String::new());
+    let mut multi_total_duration = meta
+        .and_then(|meta| meta.get("totalDuration"))
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty() && *value != "0s")
+        .map(str::to_string);
+    if multi_total_duration.is_none() {
+        if let (Some(start), Some(end)) = (
+            meta.and_then(|meta| meta.get("startTime"))
+                .and_then(Value::as_str)
+                .and_then(parse_iso_millis),
+            meta.and_then(|meta| meta.get("endTime"))
+                .and_then(Value::as_str)
+                .and_then(parse_iso_millis),
+        ) {
+            if end > start {
+                multi_total_duration = Some(crate::time::format_duration(end - start));
+            }
+        }
+    }
+    if let Some(duration) = multi_total_duration.filter(|value| value != "0s") {
+        lines.push(format!(
+            "⏱️ <b>Duração Total:</b> {}",
+            escape_html(&duration)
+        ));
+    }
+    if error.is_some_and(|value| {
+        value.to_lowercase().contains("sessão") && value.to_lowercase().contains("expir")
+            || value.to_lowercase().contains("export_session")
+    }) {
+        lines.push(String::new());
+        lines.push("⚠️ <b>Aviso de Sessão Remota:</b>".to_string());
+        lines.push(
+            "Uma ou mais contas utilizam sessão importada de outro host que parece ter expirado."
+                .to_string(),
+        );
+        lines.push(
+            "💡 <i>Ação necessária:</i> Gere uma nova sessão com <code>node export_session.js</code> no servidor de origem e importe com <code>node import_session.js</code>."
+                .to_string(),
+        );
+    }
+
+    lines.push(format!(
+        "📅 <b>Data:</b> {}",
+        crate::time::format_date_time(now)
+    ));
+    lines.push(format!("🖥️ <b>Host:</b> <code>{safe_host}</code>"));
+
+    truncate_telegram_message(&lines.join("\n"))
+}
+
+fn parse_iso_clock(raw: &str) -> Option<String> {
+    chrono::DateTime::parse_from_rfc3339(raw)
+        .ok()
+        .map(|parsed| crate::time::format_time(parsed.with_timezone(&chrono::Utc)))
+}
+
+fn parse_iso_time(raw: &str) -> Option<String> {
+    chrono::DateTime::parse_from_rfc3339(raw)
+        .ok()
+        .map(|parsed| {
+            let utc = parsed.with_timezone(&chrono::Utc);
+            format!(
+                "{} {}",
+                crate::time::format_time(utc),
+                crate::time::get_report_timezone_label(utc)
+            )
+        })
+}
+
+fn parse_iso_millis(raw: &str) -> Option<i64> {
+    chrono::DateTime::parse_from_rfc3339(raw)
+        .ok()
+        .map(|parsed| parsed.timestamp_millis())
+}
+
 /// Inteiro do payload (número, string com dígitos ou ausente → 0).
 fn payload_i64(value: Option<&Value>) -> i64 {
     match value {

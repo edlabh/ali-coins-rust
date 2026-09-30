@@ -105,7 +105,7 @@ Escopo: `flows::tasks` (state, verifier, surprise, search, prizeland, dispatcher
 
 ## Fase 5 — Multi-conta + infra (1,5–2 semanas)
 
-**Status: em andamento (2026-09-28).** Concluído: `Dockerfile` multi-stage (builder Rust + runtime Debian com libs do Chromium, usuário 10001, healthcheck dry-run), `.dockerignore` com segredos ignorados e workflow de CI (fmt/clippy/test/audit + build da imagem). Pendentes: subcomandos `checkin`/`tasks` para o wrapper executável, multi-conta sequencial e release.
+**Status: em andamento (2026-09-28/30).** Concluído: `Dockerfile` multi-stage (builder Rust + runtime Debian com libs do Chromium, usuário 10001, healthcheck dry-run), `.dockerignore` com segredos ignorados, CI (fmt/clippy/test/gitleaks + build/smoke da imagem; audit soft), subcomandos `all`/`checkin`/`tasks` para o wrapper, **multi-conta sequencial** (por processo filho, com lock por conta, backoff/jitter, relatório e notificação consolidados — validado só com **mocks**, sem contas reais) e **release `v0.1.0`** publicada. Pendentes: cobertura/SBOM no CI, auditoria de dependências bloqueante e imagem própria no runner da VM.
 
 Escopo: multi-conta sequencial com atrasos/backoff/notificações por conta; Docker multi-stage (UID/GID 10001); CI/CD; wrappers.
 

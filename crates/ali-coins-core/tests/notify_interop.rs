@@ -3,7 +3,9 @@
 //! Fixture: `tools/parity/fixtures/common/notify.json`
 //! (gere com `./tools/parity/generate-fixtures.sh`).
 
-use ali_coins_core::notify::telegram::{TelegramContext, TelegramEvent, build_message_at};
+use ali_coins_core::notify::telegram::{
+    TelegramContext, TelegramEvent, build_message_at, build_multi_account_message_at,
+};
 use chrono::{DateTime, Utc};
 use serde_json::Value;
 use std::path::Path;
@@ -65,17 +67,22 @@ fn mensagens_do_telegram_iguais_ao_oraculo() {
         let balance = case.get("totalBalance").and_then(Value::as_str);
         let expected = case["message"].as_str().expect("mensagem");
 
-        let context = TelegramContext {
-            user,
-            total_balance: balance,
-            streak_days: streak.as_deref(),
-            previous_streak_days: previous.as_deref(),
-            error,
-            host: Some(host.as_str()),
-            version: Some(version.as_str()),
-            ..TelegramContext::default()
+        // Casos multi-conta: o payload vem pronto na fixture.
+        let produced = if let Some(report) = case.get("report").filter(|value| !value.is_null()) {
+            build_multi_account_message_at(report, event, error, &host, &version, now)
+        } else {
+            let context = TelegramContext {
+                user,
+                total_balance: balance,
+                streak_days: streak.as_deref(),
+                previous_streak_days: previous.as_deref(),
+                error,
+                host: Some(host.as_str()),
+                version: Some(version.as_str()),
+                ..TelegramContext::default()
+            };
+            build_message_at(event, &context, now)
         };
-        let produced = build_message_at(event, &context, now);
         assert_eq!(
             produced, expected,
             "mensagem divergente do oráculo no caso '{name}'"
