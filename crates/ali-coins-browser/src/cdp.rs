@@ -169,6 +169,40 @@ impl Browser for CdpBrowserHandle {
     }
 }
 
+/// Teto por chamada CDP (evita comandos pendurados travando o run).
+const CDP_CALL_TIMEOUT: Duration = Duration::from_secs(20);
+/// Teto para consultas de elemento no DOM.
+const FIND_TIMEOUT: Duration = Duration::from_secs(4);
+
+/// Executa um comando CDP com teto de tempo, mapeando erro/timeout.
+async fn bounded_cdp<T, E, F>(what: &str, future: F) -> Result<T, BrowserError>
+where
+    E: std::fmt::Display,
+    F: std::future::Future<Output = Result<T, E>>,
+{
+    bounded_cdp_with(what, CDP_CALL_TIMEOUT, future).await
+}
+
+/// Como `bounded_cdp`, com teto customizado (operações mais pesadas).
+async fn bounded_cdp_with<T, E, F>(
+    what: &str,
+    timeout: Duration,
+    future: F,
+) -> Result<T, BrowserError>
+where
+    E: std::fmt::Display,
+    F: std::future::Future<Output = Result<T, E>>,
+{
+    match tokio::time::timeout(timeout, future).await {
+        Ok(Ok(value)) => Ok(value),
+        Ok(Err(error)) => Err(BrowserError::Evaluate(format!("{what}: {error}"))),
+        Err(_) => Err(BrowserError::Evaluate(format!(
+            "{what}: sem resposta em {}s (CDP pendurado)",
+            timeout.as_secs()
+        ))),
+    }
+}
+
 #[async_trait]
 impl Page for CdpPageHandle {
     async fn goto(&self, url: &str, options: &NavOptions) -> Result<(), BrowserError> {
@@ -230,10 +264,11 @@ impl Page for CdpPageHandle {
     }
 
     async fn go_back(&self) -> Result<(), BrowserError> {
-        self.page
-            .evaluate_expression("history.back()")
-            .await
-            .map_err(|err| BrowserError::Evaluate(err.to_string()))?;
+        bounded_cdp(
+            "voltar no histórico",
+            self.page.evaluate_expression("history.back()"),
+        )
+        .await?;
         tokio::time::sleep(Duration::from_millis(300)).await;
         Ok(())
     }
@@ -257,11 +292,7 @@ impl Page for CdpPageHandle {
     }
 
     async fn eval_raw(&self, script: &str) -> Result<Value, BrowserError> {
-        let result = self
-            .page
-            .evaluate_expression(script)
-            .await
-            .map_err(|err| BrowserError::Evaluate(err.to_string()))?;
+        let result = bounded_cdp("avaliar script", self.page.evaluate_expression(script)).await?;
         Ok(result.into_value().unwrap_or(Value::Null))
     }
 
@@ -272,7 +303,9 @@ impl Page for CdpPageHandle {
     ) -> Result<(), BrowserError> {
         let deadline = Instant::now() + timeout;
         loop {
-            if self.page.find_element(selector).await.is_ok()
+            if bounded_cdp("buscar elemento", self.page.find_element(selector))
+                .await
+                .is_ok()
                 && selector_visible(&self.page, selector).await
             {
                 return Ok(());
@@ -294,7 +327,13 @@ impl Page for CdpPageHandle {
     }
 
     async fn click_selector(&self, selector: &str) -> Result<(), BrowserError> {
-        if self.page.find_element(selector).await.is_err() {
+        if bounded_cdp(
+            "buscar elemento para clique",
+            self.page.find_element(selector),
+        )
+        .await
+        .is_err()
+        {
             return Err(BrowserError::NotFound(selector.to_string()));
         }
         let script = format!(
@@ -314,20 +353,14 @@ impl Page for CdpPageHandle {
         tap.duration = Some(60);
         tap.tap_count = Some(1);
         tap.gesture_source_type = Some(GestureSourceType::Touch);
-        self.page
-            .execute(tap)
-            .await
-            .map_err(|err| BrowserError::Evaluate(err.to_string()))?;
+        bounded_cdp("toque (touch)", self.page.execute(tap)).await?;
         Ok(())
     }
 
     async fn mouse_move(&self, x: f64, y: f64, drag: bool) -> Result<(), BrowserError> {
         let mut event = DispatchMouseEventParams::new(DispatchMouseEventType::MouseMoved, x, y);
         event.buttons = Some(i64::from(drag));
-        self.page
-            .execute(event)
-            .await
-            .map_err(|err| BrowserError::Evaluate(err.to_string()))?;
+        bounded_cdp("mover mouse", self.page.execute(event)).await?;
         Ok(())
     }
 
@@ -336,10 +369,7 @@ impl Page for CdpPageHandle {
         event.button = Some(MouseButton::Left);
         event.buttons = Some(1);
         event.click_count = Some(1);
-        self.page
-            .execute(event)
-            .await
-            .map_err(|err| BrowserError::Evaluate(err.to_string()))?;
+        bounded_cdp("pressionar mouse", self.page.execute(event)).await?;
         Ok(())
     }
 
@@ -348,10 +378,7 @@ impl Page for CdpPageHandle {
         event.button = Some(MouseButton::Left);
         event.buttons = Some(0);
         event.click_count = Some(1);
-        self.page
-            .execute(event)
-            .await
-            .map_err(|err| BrowserError::Evaluate(err.to_string()))?;
+        bounded_cdp("pressionar mouse", self.page.execute(event)).await?;
         Ok(())
     }
 
@@ -366,28 +393,24 @@ impl Page for CdpPageHandle {
         press.buttons = Some(1);
         press.click_count = Some(1);
         press.modifiers = Some(modifiers);
-        self.page
-            .execute(press)
-            .await
-            .map_err(|err| BrowserError::Evaluate(err.to_string()))?;
+        bounded_cdp("clique (press)", self.page.execute(press)).await?;
         let mut release =
             DispatchMouseEventParams::new(DispatchMouseEventType::MouseReleased, x, y);
         release.button = Some(MouseButton::Left);
         release.buttons = Some(0);
         release.click_count = Some(1);
         release.modifiers = Some(modifiers);
-        self.page
-            .execute(release)
-            .await
-            .map_err(|err| BrowserError::Evaluate(err.to_string()))?;
+        bounded_cdp("clique (release)", self.page.execute(release)).await?;
         Ok(())
     }
 
     async fn scroll_by(&self, x: i64, y: i64) -> Result<(), BrowserError> {
-        self.page
-            .evaluate_expression(format!("window.scrollBy({x}, {y})"))
-            .await
-            .map_err(|err| BrowserError::Evaluate(err.to_string()))?;
+        bounded_cdp(
+            "rolar página",
+            self.page
+                .evaluate_expression(format!("window.scrollBy({x}, {y})")),
+        )
+        .await?;
         Ok(())
     }
 
@@ -396,22 +419,38 @@ impl Page for CdpPageHandle {
     }
 
     async fn storage_state(&self) -> Result<Value, BrowserError> {
-        super::storage::read_storage_state(&self.page).await
+        bounded_cdp_with(
+            "ler storage state",
+            Duration::from_secs(30),
+            super::storage::read_storage_state(&self.page),
+        )
+        .await
     }
 
     async fn seed_storage_state(&self, state: &Value) -> Result<(), BrowserError> {
-        super::storage::seed_storage_state(&self.page, state).await
+        bounded_cdp_with(
+            "semear storage state",
+            Duration::from_secs(30),
+            super::storage::seed_storage_state(&self.page, state),
+        )
+        .await
     }
 
     async fn set_device_profile(&self, profile: &DeviceProfile) -> Result<(), BrowserError> {
-        apply_device_profile(&self.page, profile).await
+        bounded_cdp_with(
+            "aplicar perfil de device",
+            Duration::from_secs(30),
+            apply_device_profile(&self.page, profile),
+        )
+        .await
     }
 
     async fn screenshot(&self) -> Result<Vec<u8>, BrowserError> {
-        self.page
-            .screenshot(ScreenshotParams::default())
-            .await
-            .map_err(|err| BrowserError::Io(err.to_string()))
+        bounded_cdp(
+            "capturar screenshot",
+            self.page.screenshot(ScreenshotParams::default()),
+        )
+        .await
     }
 
     async fn close(&self) -> Result<(), BrowserError> {
@@ -433,11 +472,10 @@ async fn selector_visible(page: &CdpPage, selector: &str) -> bool {
          return rect.width > 0 && rect.height > 0 && el.offsetParent !== null; }})()",
         serde_json::to_string(selector).unwrap_or_default()
     );
-    page.evaluate_expression(script)
-        .await
-        .ok()
-        .and_then(|result| result.into_value::<bool>().ok())
-        .unwrap_or(false)
+    match tokio::time::timeout(FIND_TIMEOUT, page.evaluate_expression(script)).await {
+        Ok(Ok(result)) => result.into_value::<bool>().ok().unwrap_or(false),
+        _ => false,
+    }
 }
 
 /// Aplica o perfil mobile (device metrics + touch + UA/locale) numa página CDP.
