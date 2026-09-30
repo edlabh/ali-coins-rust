@@ -98,11 +98,16 @@ impl CdpDriver {
 /// Browser CDP iniciado.
 pub struct CdpBrowserHandle {
     browser: CdpBrowser,
+    /// Origins http(s) visitados por **qualquer página** deste browser
+    /// (o `storageState()` do Playwright enumera todos os origins do contexto).
+    visited_origins: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
 }
 
 /// Página CDP.
 pub struct CdpPageHandle {
     page: CdpPage,
+    /// Origins http(s) visitados nesta página (para o storage state multi-origin).
+    visited_origins: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
 }
 
 #[async_trait]
@@ -120,7 +125,10 @@ impl BrowserDriver for CdpDriver {
                 }
             }
         });
-        Ok(Box::new(CdpBrowserHandle { browser }))
+        Ok(Box::new(CdpBrowserHandle {
+            browser,
+            visited_origins: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
+        }))
     }
 }
 
@@ -138,7 +146,10 @@ impl Browser for CdpBrowserHandle {
         ))
         .await
         .map_err(|err| BrowserError::Launch(err.to_string()))?;
-        Ok(Box::new(CdpPageHandle { page }))
+        Ok(Box::new(CdpPageHandle {
+            page,
+            visited_origins: std::sync::Arc::clone(&self.visited_origins),
+        }))
     }
 
     async fn pages(&self) -> Result<Vec<Box<dyn Page>>, BrowserError> {
@@ -149,7 +160,12 @@ impl Browser for CdpBrowserHandle {
             .map_err(|err| BrowserError::Launch(err.to_string()))?;
         Ok(pages
             .into_iter()
-            .map(|page| Box::new(CdpPageHandle { page }) as Box<dyn Page>)
+            .map(|page| {
+                Box::new(CdpPageHandle {
+                    page,
+                    visited_origins: std::sync::Arc::clone(&self.visited_origins),
+                }) as Box<dyn Page>
+            })
             .collect())
     }
 
@@ -250,6 +266,7 @@ impl Page for CdpPageHandle {
                             ),
                             &[],
                         );
+                        self.remember_origin().await;
                         return Ok(());
                     }
                 }
@@ -420,10 +437,15 @@ impl Page for CdpPageHandle {
     }
 
     async fn storage_state(&self) -> Result<Value, BrowserError> {
+        let visited = self
+            .visited_origins
+            .lock()
+            .map(|origins| origins.clone())
+            .unwrap_or_default();
         bounded_cdp_with(
             "ler storage state",
             Duration::from_secs(30),
-            super::storage::read_storage_state(&self.page),
+            super::storage::read_storage_state(&self.page, &visited),
         )
         .await
     }
@@ -461,6 +483,31 @@ impl Page for CdpPageHandle {
             .await
             .map_err(|err| BrowserError::PageClosed(err.to_string()))?;
         Ok(())
+    }
+}
+
+impl CdpPageHandle {
+    /// Registra o origin atual (best-effort) para o storage state multi-origin.
+    async fn remember_origin(&self) {
+        let Ok(result) = bounded_cdp(
+            "ler origin",
+            self.page.evaluate_expression("location.origin"),
+        )
+        .await
+        else {
+            return;
+        };
+        let Ok(origin) = result.into_value::<String>() else {
+            return;
+        };
+        if !origin.starts_with("http") {
+            return;
+        }
+        if let Ok(mut origins) = self.visited_origins.lock() {
+            if !origins.contains(&origin) {
+                origins.push(origin);
+            }
+        }
     }
 }
 

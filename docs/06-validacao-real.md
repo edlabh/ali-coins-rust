@@ -286,6 +286,14 @@ desktop, tanto no check-in quanto nas tarefas (como o oráculo):
   (`alreadyCollected=false`, `streakDays 3→4`) e o saldo pós-check-in foi
   sincronizado (`1128`) enquanto o extrato não refletia o crédito.
 
+## D-05 — localStorage multi-origin (30/09/2026)
+
+`storage_state` agora rastreia os origins http(s) visitados por **qualquer
+página** do browser (lista compartilhada no `CdpBrowserHandle`) e lê/grava o
+localStorage por origin com CDP `DOMStorage` — como o `context.storageState()`
+do Playwright (cobre `m.aliexpress.com` e `www.aliexpress.com` no mesmo run).
+Cada chamada CDP segue com teto de tempo.
+
 ## Heartbeat na CLI (30/09/2026)
 
 O comando `all` passou a enviar o **dead man's switch** como o `all.js`:

@@ -2,19 +2,45 @@
 //!
 //! Formato de saída (mesmas chaves do `context.storageState()`):
 //! `{ cookies: [{name,value,domain,path,expires,httpOnly,secure,sameSite?}], origins: [{origin,localStorage:[{name,value}]}] }`.
-//! Limitação conhecida (D-05): apenas o origin **atual** é lido/gravado para
-//! localStorage (o oráculo enumera todos os origins visitados); cookies cobrem
-//! todos os domínios.
+//! D-05 concluído: o localStorage é lido/gravado por origin via CDP
+//! (`DOMStorage`), incluindo **todos os origins visitados** — como o
+//! `storageState()` do Playwright.
 
 use super::driver::BrowserError;
+use chromiumoxide::cdp::browser_protocol::dom_storage::{
+    GetDomStorageItemsParams, SetDomStorageItemParams, StorageId,
+};
 use chromiumoxide::cdp::browser_protocol::network::{
     CookieParam, CookieSameSite, GetCookiesParams, SetCookiesParams, TimeSinceEpoch,
 };
 use chromiumoxide::page::Page as CdpPage;
 use serde_json::{Map, Value};
 
-/// Lê o storage state da página (cookies globais + localStorage do origin atual).
-pub async fn read_storage_state(page: &CdpPage) -> Result<Value, BrowserError> {
+/// Origins para o storage state: visitados (http) + o atual, sem repetições.
+fn merge_origins(visited: &[String], current: Option<&str>) -> Vec<String> {
+    let mut origins: Vec<String> = Vec::new();
+    for origin in visited.iter().map(String::as_str).chain(current) {
+        if origin.starts_with("http") && !origins.iter().any(|item| item == origin) {
+            origins.push(origin.to_string());
+        }
+    }
+    origins
+}
+
+/// Storage ID de localStorage para um origin.
+fn local_storage_id(origin: &str) -> Result<StorageId, BrowserError> {
+    StorageId::builder()
+        .security_origin(origin.to_string())
+        .is_local_storage(true)
+        .build()
+        .map_err(|err| BrowserError::Evaluate(err.clone()))
+}
+
+/// Lê o storage state (cookies globais + localStorage de todos os origins visitados).
+pub async fn read_storage_state(
+    page: &CdpPage,
+    visited_origins: &[String],
+) -> Result<Value, BrowserError> {
     let cookies_return = page
         .execute(GetCookiesParams { urls: None })
         .await
@@ -47,25 +73,26 @@ pub async fn read_storage_state(page: &CdpPage) -> Result<Value, BrowserError> {
         .await
         .map_err(|err| BrowserError::Evaluate(err.to_string()))?;
     let origin_value: Value = origin_result.into_value().unwrap_or(Value::Null);
-    let origin = origin_value
-        .as_str()
-        .map(str::to_string)
-        .unwrap_or_default();
+    let current_origin = origin_value.as_str();
 
     let mut origins = Vec::new();
-    if origin.starts_with("http") {
-        let entries_result = page
-            .evaluate_expression(
-                "Object.entries(localStorage).map(([name, value]) => ({ name, value }))",
-            )
+    for origin in merge_origins(visited_origins, current_origin) {
+        let entries = page
+            .execute(GetDomStorageItemsParams::new(local_storage_id(&origin)?))
             .await
             .map_err(|err| BrowserError::Evaluate(err.to_string()))?;
-        let entries_value: Value = entries_result.into_value().unwrap_or(Value::Null);
-        let entries = entries_value.as_array().cloned().unwrap_or_default();
-        let mut origin_map = Map::new();
-        origin_map.insert("origin".to_string(), Value::String(origin));
-        origin_map.insert("localStorage".to_string(), Value::Array(entries));
-        origins.push(Value::Object(origin_map));
+        let items: Vec<Value> = entries
+            .entries
+            .iter()
+            .filter_map(|item| {
+                let pair = item.inner();
+                (pair.len() >= 2).then(|| serde_json::json!({ "name": pair[0], "value": pair[1] }))
+            })
+            .collect();
+        origins.push(serde_json::json!({
+            "origin": origin,
+            "localStorage": items,
+        }));
     }
 
     let mut state = Map::new();
@@ -123,21 +150,32 @@ pub async fn seed_storage_state(page: &CdpPage, state: &Value) -> Result<(), Bro
 
     if let Some(origins) = state.get("origins").and_then(Value::as_array) {
         for origin in origins {
+            let Some(origin_value) = origin.get("origin").and_then(Value::as_str) else {
+                continue;
+            };
+            if !origin_value.starts_with("http") {
+                continue;
+            }
             let Some(entries) = origin.get("localStorage").and_then(Value::as_array) else {
                 continue;
             };
-            if entries.is_empty() {
-                continue;
+            let storage_id = local_storage_id(origin_value)?;
+            for entry in entries {
+                let (Some(name), Some(value)) = (
+                    entry.get("name").and_then(Value::as_str),
+                    entry.get("value").and_then(Value::as_str),
+                ) else {
+                    continue;
+                };
+                // Best-effort por item: um par inválido não derruba o seed dos demais.
+                let _ = page
+                    .execute(SetDomStorageItemParams::new(
+                        storage_id.clone(),
+                        name.to_string(),
+                        value.to_string(),
+                    ))
+                    .await;
             }
-            // localStorage só existe em origens http(s) (about:blank é opaco):
-            // falhas/restrições não devem impedir o seed dos cookies.
-            let script = format!(
-                "(() => {{ try {{ if (!/^https?:/.test(location.protocol)) return 0; \
-                 const entries = {}; for (const e of entries) localStorage.setItem(e.name, e.value); \
-                 return entries.length; }} catch (error) {{ return 0; }} }})()",
-                serde_json::to_string(entries).unwrap_or_else(|_| "[]".to_string())
-            );
-            let _ = page.evaluate_expression(script).await;
         }
     }
     Ok(())
@@ -163,6 +201,24 @@ fn parse_same_site(raw: &str) -> Option<CookieSameSite> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn junta_origins_visitados_sem_repetir() {
+        let visited = vec!["https://m.aliexpress.com".to_string()];
+        let merged = merge_origins(&visited, Some("https://www.aliexpress.com"));
+        assert_eq!(
+            merged,
+            vec![
+                "https://m.aliexpress.com".to_string(),
+                "https://www.aliexpress.com".to_string()
+            ]
+        );
+        // Repetido e about:blank são ignorados.
+        let merged = merge_origins(&visited, Some("https://m.aliexpress.com"));
+        assert_eq!(merged, visited);
+        let merged = merge_origins(&[], Some("about:blank"));
+        assert!(merged.is_empty());
+    }
 
     #[test]
     fn same_site_ida_e_volta() {
