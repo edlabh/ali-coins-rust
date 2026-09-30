@@ -246,6 +246,28 @@ Validação ao vivo (`checkin` avulso e `all` na VM):
   `Falhou (sem progresso…)` (D-10 parado), `meta` idêntico
   (`+61 moedas`, saldo `1042`) e duração total `6m 45s`.
 
+## Incidente e correção — CDP pendurado em página lenta (30/09/2026)
+
+- **Sintoma**: o `all` agendado (11:30 UTC) travou após ~14 min de execução
+  (último log às 11:44, container ainda "up" 33 min depois, sem novos logs).
+- **Causa**: com o site lento/throttlado (navegações de 20–46 s e container do
+  projeto Node rodando no mesmo IP), uma chamada CDP (`Runtime.evaluate` /
+  consultas de elemento / storage) ficou sem resposta e **sem timeout**,
+  bloqueando o laço de tarefas (que só limita o despacho por tarefa, não as
+  leituras de DOM).
+- **Correção**: todas as chamadas CDP do driver passaram a ter teto —
+  `eval`/mouse/tap/scroll/`go_back`/screenshot em **20 s**, consultas de
+  elemento em **4 s**, storage/perfil em **30 s** — retornando erro de timeout
+  em vez de pendurar. `wait_for_selector` agora respeita o deadline mesmo com
+  consultas lentas.
+- **Validação**: CI verde no commit `8c22396`; reexecução ao vivo na VM
+  concluiu em **12m 03s** (etapas `1m 18s` + `10m 02s`), **0 erros**, sem
+  locks órfãos, 6 tarefas `Concluída` (surprise segue `Falhou…`, D-10).
+- **Observação de paridade**: a mensagem do dia saiu `check-in +0 / tarefas
+  +46` porque a leitura inicial do desktop (reutilizada) não trouxe a seção do
+  extrato (`ledger disponível: false`) naquele momento; o oráculo tem o mesmo
+  atalho de reuso e o mesmo comportamento nesse cenário.
+
 ## Fase 1 fechada — `--rotate`/`--migrate` e relatório em texto (2026-09-29)
 
 - `export-session --rotate [--all] [--account <id>] [--new-secret-from-env=VAR]`
