@@ -125,6 +125,11 @@ Escopo: multi-conta sequencial com atrasos/backoff/notificações por conta; Doc
 
 ## Fase 6 — Corte e descomissionamento (1 semana + 14 dias de observação)
 
+**Status: iniciada (2026-09-30).** Janela de observação proposta de
+**01/10 a 14/10** com os dois crons intactos (Node 09:30 UTC, Rust 11:30 UTC);
+acompanhamento em [`07-fase6-observacao.md`](07-fase6-observacao.md)
+(baseline de 30/09, planilha diária e critérios de encerramento).
+
 **Entregáveis**
 - Período paralelo: Node e Rust rodando no mesmo horário (contas distintas ou alternância controlada) por 14 dias.
 - Relatório de paridade final; decisão de corte; tag `v2.0.0` (Rust).
