@@ -20,5 +20,6 @@ node "$ROOT/tools/parity/node/gen_time_url_guard.mjs"
 node "$ROOT/tools/parity/node/gen_report.mjs"
 node "$ROOT/tools/parity/node/gen_device.mjs"
 node "$ROOT/tools/parity/node/gen_balance.mjs"
+node "$ROOT/tools/parity/node/gen_notify.mjs"
 
 echo "Fixtures geradas em tools/parity/fixtures/ (oráculo: ${ORACLE_COMMIT:-desconhecido})"

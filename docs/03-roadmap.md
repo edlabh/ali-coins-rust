@@ -28,7 +28,7 @@ Depende de: `docs/01-avaliacao.md`, `docs/02-arquitetura.md`, `docs/adr/` (ADR-0
 
 Escopo: `core::config`, `crypto`, `session`, `lock`, `logging`, `time`, `report`, `notify`, `exit`; subcomando `--dry-run` funcional; `export-session`/`import-session` completos.
 
-**Status: concluída (2026-09-28/29).** Núcleo completo: `crypto`/`session`/`lock`/`config`/`logging`/`exit`/`time`/`url_guard`/`report` + builders/`notify` (HTTP seguro, Telegram, heartbeat, webhooks) e CLI (`--dry-run`, `export-session`, `import-session`). Render em texto dos relatórios e flags `--rotate`/`--migrate` das CLIs de sessão **concluídos em 29/09**. Pendência: snapshot byte-a-byte do Telegram (D-02).
+**Status: concluída (2026-09-28/29).** Núcleo completo: `crypto`/`session`/`lock`/`config`/`logging`/`exit`/`time`/`url_guard`/`report` + builders/`notify` (HTTP seguro, Telegram, heartbeat, webhooks) e CLI (`--dry-run`, `export-session`, `import-session`). Render em texto dos relatórios e flags `--rotate`/`--migrate` das CLIs de sessão **concluídos em 29/09**; snapshot byte-a-byte dos eventos do Telegram (D-02) **concluído em 30/09**.
 
 **Entregáveis**
 - Parser de env com tabela declarativa + mensagens PT-BR; `credentials.env`/`accounts.json`; paths/hash por conta.
@@ -67,7 +67,7 @@ Escopo: `browser::cdp` (launch/cascata de args, sanitização de env, low-memory
 
 ## Fase 3 — Check-in (1,5–2 semanas)
 
-**Status: concluída com validação real (2026-09-28).** Parsers, login (SPA in-page com botão visível), orquestração do `checkin` e CLI validados contra o AliExpress real: run 1 coletou o check-in (exit 0) e run 2 confirmou `alreadyCollected` (exit 2). Evidências em `docs/06-validacao-real.md`. Pendência fina: releitura de confirmação de quebra do streak (D-08); pré-checagem/reuso/sync/água, `resolveStreakDays` (D-08) e slider/seletores `:has-text` (D-07) **concluídos em 29/09**.
+**Status: concluída com validação real (2026-09-28).** Parsers, login (SPA in-page com botão visível), orquestração do `checkin` e CLI validados contra o AliExpress real: run 1 coletou o check-in (exit 0) e run 2 confirmou `alreadyCollected` (exit 2). Evidências em `docs/06-validacao-real.md`. Pré-checagem/reuso/sync/água, `resolveStreakDays` (D-08), releitura de confirmação de quebra + alerta/exit 4 de streak quebrado (D-08) e slider/seletores `:has-text` (D-07) **concluídos em 29–30/09**.
 
 Escopo: `flows::login`, `balance`, `checkin` + `ui::navigation` (goto/retry/closeModals/slider).
 

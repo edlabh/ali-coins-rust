@@ -103,6 +103,28 @@ pub fn should_confirm_checkin_by_ledger(
     !just_collected && !already_collected && has_bonus_from_ledger
 }
 
+/// Precisa confirmar a quebra de streak pelo extrato? (port de
+/// `shouldConfirmStreakByStatement`).
+#[must_use]
+pub fn should_confirm_streak_by_statement(
+    detected_streak: Option<i64>,
+    previous_streak_days: Option<i64>,
+    statement_streak: Option<i64>,
+    already_collected: bool,
+) -> bool {
+    if already_collected {
+        return false;
+    }
+    if detected_streak != Some(1) {
+        return false;
+    }
+    if previous_streak_days.is_none_or(|value| value <= 1) {
+        return false;
+    }
+    // Extrato já disponível (confirma ou desmente) → não precisa de nova leitura.
+    statement_streak.is_none()
+}
+
 /// `resolveStreakDays` com os mesmos parâmetros do oráculo.
 #[must_use]
 #[allow(clippy::too_many_arguments)]
@@ -200,6 +222,46 @@ mod tests {
         assert!(!should_confirm_checkin_by_ledger(true, false, true));
         assert!(!should_confirm_checkin_by_ledger(false, true, true));
         assert!(!should_confirm_checkin_by_ledger(false, false, false));
+    }
+
+    #[test]
+    fn confirma_quebra_de_streak_pelo_extrato() {
+        assert!(should_confirm_streak_by_statement(
+            Some(1),
+            Some(226),
+            None,
+            false
+        ));
+        assert!(!should_confirm_streak_by_statement(
+            Some(1),
+            Some(226),
+            Some(1),
+            false
+        ));
+        assert!(!should_confirm_streak_by_statement(
+            Some(1),
+            Some(226),
+            None,
+            true
+        ));
+        assert!(!should_confirm_streak_by_statement(
+            Some(2),
+            Some(226),
+            None,
+            false
+        ));
+        assert!(!should_confirm_streak_by_statement(
+            Some(1),
+            Some(1),
+            None,
+            false
+        ));
+        assert!(!should_confirm_streak_by_statement(
+            None,
+            Some(226),
+            None,
+            false
+        ));
     }
 
     #[test]

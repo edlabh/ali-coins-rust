@@ -86,18 +86,16 @@ fn balance_diff(initial: Option<&str>, final_value: Option<&str>) -> Option<f64>
     (final_value >= initial).then_some(final_value - initial)
 }
 
-/// Notificação única do relatório unificado (best-effort).
-async fn send_unified_notification(
+/// Envia uma mensagem já montada (best-effort).
+async fn send_message(
     config: &ali_coins_core::config::Config,
     account: &ali_coins_core::config::Account,
-    payload: &serde_json::Value,
-    event: TelegramEvent,
+    message: &str,
 ) {
     let timeout = Duration::from_millis(config.telegram_timeout_ms);
     let Ok(client) = SafeHttpClient::new(config.allow_private_webhooks, timeout) else {
         return;
     };
-    let host = notify_host(config);
     let chat_id = account
         .telegram_chat_id
         .clone()
@@ -110,8 +108,7 @@ async fn send_unified_notification(
         timeout_ms: config.telegram_timeout_ms,
         api_base: String::new(),
     };
-    let message = build_unified_report_message(payload, &host, env!("CARGO_PKG_VERSION"), event);
-    match send_telegram(&client, &telegram_config, &message).await {
+    match send_telegram(&client, &telegram_config, message).await {
         result if result.ok => {
             logging::global().info("Notificação Telegram enviada.", &[]);
         }
@@ -127,6 +124,18 @@ async fn send_unified_notification(
             );
         }
     }
+}
+
+/// Notificação do relatório unificado (best-effort).
+async fn send_unified_notification(
+    config: &ali_coins_core::config::Config,
+    account: &ali_coins_core::config::Account,
+    payload: &serde_json::Value,
+    event: TelegramEvent,
+) {
+    let host = notify_host(config);
+    let message = build_unified_report_message(payload, &host, env!("CARGO_PKG_VERSION"), event);
+    send_message(config, account, &message).await;
 }
 
 /// `ali-coins all [--account <id>] [--json] [--force]`
@@ -346,6 +355,51 @@ pub fn run(args: &[String]) -> StdExitCode {
                 already_collected,
                 checkin_coins_from_ledger_checkin,
             );
+            // Confirmação da quebra de streak pelo extrato (leitura fresca quando
+            // a tela lê 1 com histórico anterior > 1 e o extrato ainda não veio).
+            let mut statement_streak = desktop_after_checkin
+                .as_ref()
+                .and_then(|data| data.desktop_streak);
+            if crate::checkin_parity::should_confirm_streak_by_statement(
+                result.streak_days,
+                previous_streak_days,
+                statement_streak,
+                already_collected,
+            ) {{
+                logging::global().warn(
+                    "Leitura de streak = 1 com histórico anterior > 1; confirmando a quebra pelo extrato desktop...",
+                    &[],
+                );
+                let state = page.storage_state().await.ok();
+                if let Some(confirm_read) = crate::checkin_parity::read_early_desktop(
+                    &*browser,
+                    state.as_ref(),
+                    Duration::from_millis(config.nav_timeout_short),
+                )
+                .await
+                {{
+                    if confirm_read.desktop_streak.is_some() {{
+                        statement_streak = confirm_read.desktop_streak;
+                    }}
+                    if statement_streak.is_some_and(|value| value > 1) {{
+                        logging::global().info(
+                            "Extrato desmente a quebra (sequência do extrato > 1); preservando o streak real.",
+                            &[],
+                        );
+                    }} else {{
+                        logging::global().warn(
+                            "Extrato não desmente a quebra (sequência do extrato <= 1 ou indisponível).",
+                            &[],
+                        );
+                    }}
+                }} else {{
+                    logging::global().warn(
+                        "Falha ao confirmar a quebra de streak pelo extrato; mantendo a leitura da tela.",
+                        &[],
+                    );
+                }}
+            }}
+
             let resolved = crate::checkin_parity::resolve_streak(
                 result.streak_days,
                 previous_streak_days,
@@ -353,9 +407,7 @@ pub fn run(args: &[String]) -> StdExitCode {
                 just_collected,
                 already_collected,
                 confirmed_by_ledger,
-                desktop_after_checkin
-                    .as_ref()
-                    .and_then(|data| data.desktop_streak),
+                statement_streak,
             );
             let streak_days = crate::checkin_parity::resolved_streak_number(&resolved);
             let streak_value = resolved.streak_days.clone();
@@ -553,16 +605,63 @@ pub fn run(args: &[String]) -> StdExitCode {
 
             let had_new_checkin = !already_collected || checkin_coins_from_ledger;
             let had_task_actions = tasks_run.as_ref().is_some_and(|run| run.actions > 0);
-            let event = if !had_new_checkin && !had_task_actions {
+
+            // Alerta crítico de streak quebrado (paridade all.js): evento dedicado
+            // e exit 4 (perda irreversível após dias de sequência).
+            #[allow(clippy::cast_precision_loss)]
+            let streak_broken = ali_coins_core::report::is_streak_break(
+                streak_days.map(|value| value as f64),
+                previous_streak_days.map(|value| value as f64),
+                already_collected,
+            );
+            if streak_broken {
+                logging::global().error(
+                    &format!(
+                        "🚨 ALERTA CRÍTICO: Streak quebrado! A sequência diária de check-in foi interrompida ou resetada (ontem {previous_streak_days:?} -> hoje {streak_days:?})."
+                    ),
+                    &[],
+                );
+            }
+
+            let event = if streak_broken {
+                TelegramEvent::StreakBreak
+            } else if !had_new_checkin && !had_task_actions {
                 TelegramEvent::AlreadyCollected
             } else {
                 TelegramEvent::Success
             };
             if config.telegram_enabled {
-                send_unified_notification(&config, account, &payload, event).await;
+                if streak_broken {
+                    let host = notify_host(&config);
+                    let previous_display = previous_streak_days
+                        .map_or_else(|| "N/D".to_string(), |value| value.to_string());
+                    let streak_display =
+                        streak_days.map_or_else(|| "N/D".to_string(), |value| value.to_string());
+                    let balance_display = payload
+                        .get("meta")
+                        .and_then(|meta| meta.get("finalBalance"))
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or("N/D")
+                        .to_string();
+                    let context = TelegramContext {
+                        user: Some(account.masked_user.as_str()),
+                        total_balance: Some(balance_display.as_str()),
+                        streak_days: Some(streak_display.as_str()),
+                        previous_streak_days: Some(previous_display.as_str()),
+                        host: Some(host.as_str()),
+                        version: Some(env!("CARGO_PKG_VERSION")),
+                        ..TelegramContext::default()
+                    };
+                    let message = build_message(TelegramEvent::StreakBreak, &context);
+                    send_message(&config, account, &message).await;
+                } else {
+                    send_unified_notification(&config, account, &payload, event).await;
+                }
             }
 
-            if had_new_checkin || had_task_actions {
+            if streak_broken {
+                Ok(ExitCode::StreakBroken.as_i32())
+            } else if had_new_checkin || had_task_actions {
                 Ok(ExitCode::Success.as_i32())
             } else {
                 Ok(ExitCode::NoAction.as_i32())
@@ -593,7 +692,16 @@ pub fn run(args: &[String]) -> StdExitCode {
                         version: Some(env!("CARGO_PKG_VERSION")),
                         ..TelegramContext::default()
                     };
-                    let message = build_message(TelegramEvent::Failure, &context);
+                    // Eventos dedicados como no oráculo (2FA/captcha/falha genérica).
+                    let telegram_event = if error.contains("2FA") || error.contains("não-interativa")
+                    {
+                        TelegramEvent::TwoFactorRequired
+                    } else if error.to_lowercase().contains("captcha") {
+                        TelegramEvent::CaptchaRequired
+                    } else {
+                        TelegramEvent::Failure
+                    };
+                    let message = build_message(telegram_event, &context);
                     runtime.block_on(async {
                         if let Ok(client) =
                             SafeHttpClient::new(config.allow_private_webhooks, timeout)

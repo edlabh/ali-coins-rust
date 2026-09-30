@@ -286,6 +286,22 @@ desktop, tanto no check-in quanto nas tarefas (como o oráculo):
   (`alreadyCollected=false`, `streakDays 3→4`) e o saldo pós-check-in foi
   sincronizado (`1128`) enquanto o extrato não refletia o crédito.
 
+## D-02/D-08 — Telegram byte-a-byte e streak quebrado (30/09/2026)
+
+- **D-02**: eventos de produção do Telegram portados byte-a-byte
+  (`dry_run`, `manual_test`, `lock_active`, `failure`, `streak_break`,
+  `2fa_required`, `captcha_required`, `captcha_cooldown_released`) com
+  `extractRelevantErrorMessage` e `sanitizeSensitiveQueryParams` fiéis.
+  Fixture de snapshot gerada do oráculo (`gen_notify.mjs`, relógio congelado)
+  e teste `notify_interop` comparando as 10 mensagens byte-a-byte.
+- **D-08**: releitura de confirmação de quebra de streak
+  (`shouldConfirmStreakByStatement`) quando a tela lê 1 com histórico > 1 e o
+  extrato ainda não veio; `all` agora detecta a quebra (`is_streak_break`),
+  envia a mensagem dedicada `🚨 STREAK QUEBRADO` e sai com **exit 4** (como o
+  `all.js`).
+- Falhas de 2FA/captcha passam a enviar os eventos dedicados (não mais o
+  `failure` genérico).
+
 ## Tarefa de surpresa — reprodução do mecanismo do oráculo (30/09/2026)
 
 O oráculo concluiu as duas rodadas da tarefa **em outro host**, então o port

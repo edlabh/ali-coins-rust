@@ -157,103 +157,342 @@ pub fn truncate_telegram_message(text: &str) -> String {
     sliced
 }
 
-fn footer(ctx: &TelegramContext<'_>) -> String {
-    match (ctx.host, ctx.version) {
-        (Some(host), Some(version)) => format!("\n🌐 {host} • v{version}"),
-        (Some(host), None) => format!("\n🌐 {host}"),
-        _ => String::new(),
+/// Sequência formatada como o oráculo (`N dias` ou `N/D`).
+fn to_safe_streak(raw: Option<&str>) -> String {
+    if let Some(text) = raw {
+        let clean = text.trim();
+        if !clean.is_empty() && clean.chars().all(|character| character.is_ascii_digit()) {
+            if let Ok(parsed) = clean.parse::<i64>() {
+                if parsed > 0 {
+                    return format!("{parsed} dias");
+                }
+            }
+        }
+    }
+    "N/D".to_string()
+}
+
+/// Extrai a mensagem de erro relevante (port de `extractRelevantErrorMessage`).
+#[must_use]
+pub fn extract_relevant_error_message(error: Option<&str>) -> String {
+    const UNKNOWN: &str = "Erro desconhecido durante o processamento.";
+    let Some(error) = error else {
+        return UNKNOWN.to_string();
+    };
+    let raw = error.trim();
+    if raw.is_empty() {
+        return UNKNOWN.to_string();
+    }
+    let top_lines = |text: &str| -> Option<String> {
+        let lines: Vec<&str> = text
+            .split('\n')
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .take(3)
+            .collect();
+        (!lines.is_empty()).then(|| lines.join("\n"))
+    };
+    let logs_split = regex::Regex::new(r"={5,}\s*logs?\s*={5,}").expect("regex de logs");
+    if logs_split.is_match(raw) {
+        if let Some(before) = logs_split.split(raw).next().map(str::trim) {
+            if !before.is_empty() {
+                if let Some(top) = top_lines(before) {
+                    return top;
+                }
+            }
+        }
+    }
+    let call_log = regex::Regex::new(r"(?i)Call log:").expect("regex call log");
+    if call_log.is_match(raw) {
+        if let Some(before) = call_log.split(raw).next().map(str::trim) {
+            if !before.is_empty() {
+                if let Some(top) = top_lines(before) {
+                    return top;
+                }
+            }
+        }
+    }
+    let lines: Vec<&str> = raw
+        .split('\n')
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect();
+    if lines.len() <= 3 {
+        return lines.join("\n");
+    }
+    let irrelevant = regex::Regex::new(r"(?i)^(at\s+|-\s*\[pid=|<\s*gracefully|\(?node:internal)")
+        .expect("regex de linhas irrelevantes");
+    let meaningful: Vec<&str> = lines
+        .iter()
+        .copied()
+        .filter(|line| !irrelevant.is_match(line))
+        .collect();
+    let indicator = regex::Regex::new(
+        r"(?i)(error|fatal|fail|sandboxing|timeout|recusad|inválid|expirad|bloque|crash|exception)",
+    )
+    .expect("regex de indicadores");
+    let error_lines: Vec<&str> = meaningful
+        .iter()
+        .copied()
+        .filter(|line| indicator.is_match(line))
+        .take(3)
+        .collect();
+    if !error_lines.is_empty() {
+        return error_lines.join("\n");
+    }
+    if !meaningful.is_empty() {
+        return meaningful
+            .into_iter()
+            .take(3)
+            .collect::<Vec<_>>()
+            .join("\n");
+    }
+    lines.into_iter().take(3).collect::<Vec<_>>().join("\n")
+}
+
+/// Redige segredos em URLs/headers textualizados (port de `sanitizeSensitiveQueryParams`).
+#[must_use]
+pub fn sanitize_sensitive_query_params(text: &str) -> String {
+    static QUERY: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    static BOT: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    static BEARER: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    static HEADERS: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let query = QUERY.get_or_init(|| {
+        regex::Regex::new(
+            r"(?i)([?&;#](?:access_token|api[_-]?key|apikey|auth|authorization|code|password|passwd|secret|session|ticket|token)=)[^&#;\s]+",
+        )
+        .expect("regex de query sensível")
+    });
+    let bot = BOT.get_or_init(|| {
+        regex::Regex::new(r"(?i)(bot\d+:[\w-]{20,})").expect("regex de token de bot")
+    });
+    let bearer = BEARER
+        .get_or_init(|| regex::Regex::new(r"(?i)(Bearer\s+)[\w\-._~+/=]+").expect("regex bearer"));
+    let headers = HEADERS.get_or_init(|| {
+        regex::Regex::new(r"(?i)((?:authorization|cookie|set-cookie|x-api-key)\s*[:=]\s*)[^\r\n]+")
+            .expect("regex de headers")
+    });
+    let text = query.replace_all(text, "$1[REDACTED]");
+    let text = bot.replace_all(&text, "bot[REDACTED_TOKEN]");
+    let text = bearer.replace_all(&text, "$1[REDACTED]");
+    headers.replace_all(&text, "$1[REDACTED]").to_string()
+}
+
+/// Host com versão (escapado), como o oráculo (`NOTIFY_HOST_LABEL` > hostname).
+fn safe_host(ctx: &TelegramContext<'_>) -> String {
+    let host = ctx.host.map_or_else(
+        || {
+            std::env::var("NOTIFY_HOST_LABEL")
+                .ok()
+                .filter(|value| !value.trim().is_empty())
+                .unwrap_or_else(crate::lock::hostname)
+        },
+        str::to_string,
+    );
+    let version = ctx.version.unwrap_or(env!("CARGO_PKG_VERSION"));
+    escape_html(&format!("{host} (v{version})"))
+}
+
+/// Usuário exibido nas mensagens (ctx > `ALI_USER` mascarado > `desconhecida`).
+fn message_user(ctx: &TelegramContext<'_>) -> String {
+    if let Some(user) = ctx.user.filter(|value| !value.trim().is_empty()) {
+        return user.to_string();
+    }
+    std::env::var("ALI_USER")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .map_or_else(|| "desconhecida".to_string(), |value| mask_user(&value))
+}
+
+/// Nome do evento no formato do oráculo (para o fallback).
+fn event_name(event: TelegramEvent) -> &'static str {
+    match event {
+        TelegramEvent::DryRun => "dry_run",
+        TelegramEvent::ManualTest => "manual_test",
+        TelegramEvent::Success => "success",
+        TelegramEvent::AlreadyCollected => "already_collected",
+        TelegramEvent::Failure => "failure",
+        TelegramEvent::LockActive => "lock_active",
+        TelegramEvent::StreakBreak => "streak_break",
+        TelegramEvent::TwoFactorRequired => "2fa_required",
+        TelegramEvent::CaptchaRequired => "captcha_required",
+        TelegramEvent::CaptchaCooldownReleased => "captcha_cooldown_released",
+        TelegramEvent::Checkin => "checkin",
+        TelegramEvent::Tasks => "tasks",
+        TelegramEvent::MultiAccount => "multi_account_report",
     }
 }
 
-/// Monta a mensagem HTML do evento.
+/// Monta a mensagem HTML do evento no instante atual.
 #[must_use]
 pub fn build_message(event: TelegramEvent, ctx: &TelegramContext<'_>) -> String {
-    let user = ctx.user.unwrap_or("conta");
+    build_message_at(event, ctx, chrono::Utc::now())
+}
+
+/// Monta a mensagem HTML do evento num instante fixo (testes de paridade).
+#[must_use]
+pub fn build_message_at(
+    event: TelegramEvent,
+    ctx: &TelegramContext<'_>,
+    now: chrono::DateTime<chrono::Utc>,
+) -> String {
+    let now = crate::time::format_date_time(now);
+    let host = safe_host(ctx);
+    let user = message_user(ctx);
+    let user_line = format!("👤 <b>Conta:</b> <code>{}</code>", escape_html(&user));
     let body = match event {
         TelegramEvent::DryRun => format!(
-            "🧪 <b>ali-coins — Dry-run</b>\nConfiguração validada para <code>{}</code> sem abrir o navegador.",
-            escape_html(user)
+            "🧪 <b>AliExpress Moedas - Teste Dry-Run</b>\n\n\
+             A validação de ambiente e credenciais foi concluída com sucesso!\n\
+             📅 <b>Data:</b> {now}\n\
+             🖥️ <b>Host:</b> <code>{host}</code>\n\
+             🔔 <b>Notificações Telegram:</b> Operacionais e ativas"
         ),
-        TelegramEvent::ManualTest => "🔔 <b>ali-coins — Teste de notificação</b>\nO envio pelo Telegram está configurado corretamente.".to_string(),
-        TelegramEvent::Success => {
-            let mut lines = vec![format!(
-                "✅ <b>ali-coins — Execução concluída</b>\nConta: <code>{}</code>",
-                escape_html(user)
-            )];
-            if let Some(balance) = ctx.total_balance {
-                lines.push(format!("💰 Saldo: {balance}"));
+        TelegramEvent::ManualTest => format!(
+            "🔔 <b>AliExpress Moedas - Teste de Notificação Telegram</b>\n\n\
+             Se você está lendo esta mensagem, o bot do Telegram foi configurado com sucesso e está operando perfeitamente! 🎉\n\
+             📅 <b>Data:</b> {now}\n\
+             🖥️ <b>Host:</b> <code>{host}</code>"
+        ),
+        TelegramEvent::LockActive => {
+            let details = ctx.error.unwrap_or("").trim();
+            // O oráculo aplica `filter(Boolean)`: a linha vazia após o título cai.
+            let mut lines = vec![
+                "⚠️ <b>AliExpress Moedas - Execução Bloqueada (Lock Ativo)</b>".to_string(),
+                "Outra instância da automação já está em execução no host. A execução atual foi finalizada para evitar sobreposição.".to_string(),
+            ];
+            if !details.is_empty() {
+                lines.push(format!("ℹ️ <i>{}</i>", escape_html(details)));
             }
-            if let Some(coins) = ctx.coins_gained {
-                lines.push(format!("🪙 Moedas ganhas: +{coins}"));
+            if ctx.user.is_some() {
+                lines.push(user_line.clone());
             }
-            if let Some(streak) = ctx.streak_days {
-                lines.push(format!("🔥 Streak: {streak} dias"));
+            lines.push(format!("📅 <b>Data:</b> {now}"));
+            lines.push(format!("🖥️ <b>Host:</b> <code>{host}</code>"));
+            lines.join("\n")
+        }
+        TelegramEvent::Failure => {
+            let snippet =
+                sanitize_sensitive_query_params(&extract_relevant_error_message(ctx.error));
+            let mut lines = vec![
+                format!("🔴 ali-coins — {now}"),
+                format!("⚠️ <b>Erro:</b> <code>{}</code>", escape_html(&snippet)),
+            ];
+            if ctx.user.is_some() {
+                lines.push(user_line.clone());
             }
-            if let Some(duration) = ctx.duration {
-                lines.push(format!("⏱️ Duração: {duration}"));
+            lines.push(format!("🖥️ <b>Host:</b> <code>{host}</code>"));
+            lines.join("\n")
+        }
+        TelegramEvent::StreakBreak => {
+            let yesterday = to_safe_streak(ctx.previous_streak_days);
+            let today = to_safe_streak(ctx.streak_days);
+            let balance = ctx
+                .total_balance
+                .filter(|value| !value.trim().is_empty())
+                .unwrap_or("N/D");
+            let mut lines = vec![
+                format!("🚨 <b>STREAK QUEBRADO</b> — {now}"),
+                String::new(),
+                "⚠️ <b>Atenção:</b> A sequência diária de check-in foi interrompida ou resetada!"
+                    .to_string(),
+            ];
+            if ctx.user.is_some() {
+                lines.push(user_line.clone());
+            }
+            lines.push(format!("🖥️ <b>Host:</b> <code>{host}</code>"));
+            lines.push(format!(
+                "📉 <b>Ontem:</b> {} ➔ <b>Hoje:</b> {}",
+                escape_html(&yesterday),
+                escape_html(&today)
+            ));
+            lines.push(format!("💰 <b>Saldo Atual:</b> {}", escape_html(balance)));
+            lines.join("\n")
+        }
+        TelegramEvent::TwoFactorRequired => {
+            let mut lines = vec![
+                format!("🔐 <b>AliExpress Moedas - Verificação 2FA Solicitada</b> — {now}"),
+                String::new(),
+            ];
+            if ctx.user.is_some() {
+                lines.push(user_line.clone());
+            }
+            lines.push(format!("🖥️ <b>Host:</b> <code>{host}</code>"));
+            lines.push(String::new());
+            lines.push("⚠️ <b>Execução Não-Interativa (Cron / CI):</b>".to_string());
+            lines.push(
+                "O AliExpress solicitou verificação 2FA (e-mail ou SMS) e a automação foi finalizada em &lt;5s para evitar travamento."
+                    .to_string(),
+            );
+            lines.push(String::new());
+            lines.push("💡 <b>Guia de Resolução (2FA no Cron):</b>".to_string());
+            lines.push(
+                "1. Execute localmente no seu computador: <code>./run_all.sh</code>".to_string(),
+            );
+            lines
+                .push("2. Digite o código de 6 dígitos quando solicitado no terminal.".to_string());
+            lines.push(
+                "3. Exporte a nova sessão gerada: <code>node export_session.js</code>".to_string(),
+            );
+            lines.push("4. Importe a sessão no servidor: <code>node import_session.js &lt; session_token.txt</code>".to_string());
+            lines.join("\n")
+        }
+        TelegramEvent::CaptchaRequired => {
+            let snippet =
+                sanitize_sensitive_query_params(&extract_relevant_error_message(ctx.error));
+            let mut lines = vec![
+                format!("🤖 ali-coins — {now}"),
+                "⚠️ <b>Desafio anti-bot (captcha) detectado no login</b>".to_string(),
+            ];
+            if ctx.user.is_some() {
+                lines.push(user_line.clone());
+            }
+            lines.push(format!("🖥️ <b>Host:</b> <code>{host}</code>"));
+            lines.push(String::new());
+            lines.push(format!("ℹ️ <i>{}</i>", escape_html(&snippet)));
+            lines.push(String::new());
+            lines.push(
+                "💡 <b>Ação:</b> renove a sessão localmente (rede residencial) e importe com <code>node import_session.js</code>. Novas tentativas de login ficam pausadas pelo cooldown (<code>CAPTCHA_COOLDOWN_HOURS</code>)."
+                    .to_string(),
+            );
+            lines.join("\n")
+        }
+        TelegramEvent::CaptchaCooldownReleased => {
+            let mut lines = vec![
+                format!("🤖 ali-coins — {now}"),
+                "✅ <b>Cooldown pós-captcha liberado</b>".to_string(),
+            ];
+            if ctx.user.is_some() {
+                lines.push(user_line.clone());
+            }
+            lines.push(format!("🖥️ <b>Host:</b> <code>{host}</code>"));
+            lines.push(String::new());
+            lines.push(
+                "A janela de pausa expirou; a automação voltará a tentar o login normalmente."
+                    .to_string(),
+            );
+            lines.join("\n")
+        }
+        TelegramEvent::Success
+        | TelegramEvent::AlreadyCollected
+        | TelegramEvent::Checkin
+        | TelegramEvent::Tasks
+        | TelegramEvent::MultiAccount => {
+            let mut lines = vec![
+                "🔔 <b>AliExpress Moedas - Notificação</b>".to_string(),
+                String::new(),
+                format!("Status: {}", event_name(event)),
+                user_line,
+                format!("📅 <b>Data:</b> {now}"),
+                format!("🖥️ <b>Host:</b> <code>{host}</code>"),
+            ];
+            if ctx.user.is_none() {
+                lines.remove(3);
             }
             lines.join("\n")
         }
-        TelegramEvent::AlreadyCollected => format!(
-            "ℹ️ <b>ali-coins — Já coletado hoje</b>\nConta: <code>{}</code>{}",
-            escape_html(user),
-            ctx.streak_days
-                .map(|streak| format!("\n🔥 Streak: {streak} dias"))
-                .unwrap_or_default()
-        ),
-        TelegramEvent::Failure => format!(
-            "🔴 <b>ali-coins — Falha na execução</b>\nConta: <code>{}</code>\n<b>Erro:</b> {}",
-            escape_html(user),
-            escape_html(ctx.error.unwrap_or("erro desconhecido"))
-        ),
-        TelegramEvent::LockActive => format!(
-            "🔒 <b>ali-coins — Execução já em andamento</b>\nOutra instância mantém o lock para <code>{}</code>.",
-            escape_html(user)
-        ),
-        TelegramEvent::StreakBreak => format!(
-            "⚠️ <b>ali-coins — Streak quebrado</b>\nConta: <code>{}</code>\nOntem: {} → Hoje: {}{}",
-            escape_html(user),
-            ctx.previous_streak_days.unwrap_or("N/D"),
-            ctx.streak_days.unwrap_or("N/D"),
-            ctx.total_balance
-                .map(|balance| format!("\n💰 Saldo: {balance}"))
-                .unwrap_or_default()
-        ),
-        TelegramEvent::TwoFactorRequired => format!(
-            "🔐 <b>ali-coins — Verificação 2FA necessária</b>\nConta: <code>{}</code>\nRenove a sessão localmente com <code>node export_session.js</code> e importe com <code>node import_session.js</code>.",
-            escape_html(user)
-        ),
-        TelegramEvent::CaptchaRequired => format!(
-            "🤖 <b>ali-coins — Captcha solicitado pelo AliExpress</b>\nConta: <code>{}</code>\nNovas tentativas ficam pausadas pelo cooldown.",
-            escape_html(user)
-        ),
-        TelegramEvent::CaptchaCooldownReleased => format!(
-            "✅ <b>ali-coins — Cooldown pós-captcha liberado</b>\nConta: <code>{}</code> pode tentar login novamente.",
-            escape_html(user)
-        ),
-        TelegramEvent::Checkin => format!(
-            "✅ <b>ali-coins — Check-in diário</b>\nConta: <code>{}</code>{}",
-            escape_html(user),
-            ctx.total_balance
-                .map(|balance| format!("\n💰 Saldo: {balance}"))
-                .unwrap_or_default()
-        ),
-        TelegramEvent::Tasks => format!(
-            "✅ <b>ali-coins — Tarefas diárias</b>\nConta: <code>{}</code>{}",
-            escape_html(user),
-            ctx.coins_gained
-                .map(|coins| format!("\n🪙 Ganho: +{coins}"))
-                .unwrap_or_default()
-        ),
-        TelegramEvent::MultiAccount => format!(
-            "✅ <b>ali-coins — Multi-conta</b>\nContas processadas: <code>{}</code>{}",
-            escape_html(user),
-            ctx.total_balance
-                .map(|balance| format!("\n💰 Saldo final: {balance}"))
-                .unwrap_or_default()
-        ),
     };
-    truncate_telegram_message(&format!("{body}{}", footer(ctx)))
+    truncate_telegram_message(&body)
 }
 
 /// Inteiro do payload (número, string com dígitos ou ausente → 0).
@@ -601,11 +840,11 @@ mod tests {
     }
 
     #[test]
-    fn mensagens_por_evento() {
+    fn mensagens_por_evento_no_formato_do_oraculo() {
         let ctx = TelegramContext {
             user: Some("fulano@example.com"),
-            total_balance: Some("150"),
-            streak_days: Some("42"),
+            total_balance: Some("150 moedas"),
+            streak_days: Some("1"),
             previous_streak_days: Some("50"),
             duration: Some("1m 20s"),
             error: Some("timeout"),
@@ -613,11 +852,39 @@ mod tests {
             version: Some("0.1.0"),
             coins_gained: Some(35),
         };
-        assert!(build_message(TelegramEvent::Success, &ctx).contains("Execução concluída"));
-        assert!(build_message(TelegramEvent::Failure, &ctx).contains("timeout"));
-        assert!(build_message(TelegramEvent::StreakBreak, &ctx).contains("50 → Hoje: 42"));
-        assert!(build_message(TelegramEvent::TwoFactorRequired, &ctx).contains("2FA"));
-        assert!(build_message(TelegramEvent::Success, &ctx).contains("vps-1 • v0.1.0"));
+        let success = build_message(TelegramEvent::Success, &ctx);
+        assert!(success.contains("🔔 <b>AliExpress Moedas - Notificação</b>"));
+        assert!(success.contains("Status: success"));
+        let failure = build_message(TelegramEvent::Failure, &ctx);
+        assert!(failure.contains("🔴 ali-coins —"));
+        assert!(failure.contains("⚠️ <b>Erro:</b> <code>timeout</code>"));
+        let streak = build_message(TelegramEvent::StreakBreak, &ctx);
+        assert!(streak.contains("🚨 <b>STREAK QUEBRADO</b>"));
+        assert!(streak.contains("📉 <b>Ontem:</b> 50 dias ➔ <b>Hoje:</b> 1 dias"));
+        let two_factor = build_message(TelegramEvent::TwoFactorRequired, &ctx);
+        assert!(two_factor.contains("Verificação 2FA Solicitada"));
+        assert!(two_factor.contains("&lt;5s"));
+        let lock = build_message(TelegramEvent::LockActive, &ctx);
+        assert!(lock.contains("Execução Bloqueada (Lock Ativo)"));
+        let captcha = build_message(TelegramEvent::CaptchaRequired, &ctx);
+        assert!(captcha.contains("Desafio anti-bot (captcha) detectado no login"));
+        let dry_run = build_message(TelegramEvent::DryRun, &ctx);
+        assert!(dry_run.contains("🧪 <b>AliExpress Moedas - Teste Dry-Run</b>"));
+        assert!(dry_run.contains("🔔 <b>Notificações Telegram:</b> Operacionais e ativas"));
+    }
+
+    #[test]
+    fn sanitiza_segredos_em_erros() {
+        let text = "GET https://x/y?token=abc123&session=zzz\nAuthorization: Bearer abc.def-ghi\nCookie: a=1; b=2";
+        let sanitized = sanitize_sensitive_query_params(text);
+        assert!(sanitized.contains("token=[REDACTED]"));
+        assert!(sanitized.contains("session=[REDACTED]"));
+        // A linha inteira de header é redigida (cookies multivalorados inclusos).
+        assert!(sanitized.contains("Authorization: [REDACTED]"));
+        assert!(sanitized.contains("Cookie: [REDACTED]"));
+        assert!(!sanitized.contains("abc123"));
+        assert!(!sanitized.contains("abc.def-ghi"));
+        assert!(!sanitized.contains("a=1"));
     }
 
     #[test]

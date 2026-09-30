@@ -165,5 +165,5 @@ async fn mensagem_e_montada_antes_do_envio() {
         ..Default::default()
     };
     let message = build_message(TelegramEvent::DryRun, &ctx);
-    assert!(message.contains("Dry-run"));
+    assert!(message.contains("Teste Dry-Run"));
 }
