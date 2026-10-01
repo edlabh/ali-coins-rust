@@ -309,6 +309,12 @@ desktop, tanto no check-in quanto nas tarefas (como o oráculo):
   o build completo (CI) usa `codegen-units=16`, `LTO=false` e cache do BuildKit.
   O smoke do CI foi corrigido para não mascarar o exit code do container (`| head`).
 
+- **Toolchain pinada (01/10)**: `rust-toolchain.toml` e Dockerfile fixam **1.99.0**
+  (antes `channel = "stable"`). Motivo: cada container `rust:bookworm` sincronizava
+  o stable e, quando saía versão nova, o cargo invalidava o cache e recompilava
+  tudo (166 crates na recompilação de 01/10 após o stable virar 1.99.0). Com a
+  versão fixa, o `target/` continua válido entre builds.
+
 ## Recuperação da página principal nas tarefas (01/10/2026)
 
 A execução do cron de 01/10 mostrou a gaveta de tarefas inacessível **após** a
@@ -333,6 +339,28 @@ Correções aplicadas:
 - **Testes**: 2 novos no crate de flows (página fechada recriada na central;
   página viva com URL errada navegada sem recriar) — 47 testes no crate,
   workspace e clippy verdes.
+
+### Reforço após execução real (01/10, 12:39–12:47 UTC)
+
+Execução real autorizada com a imagem nova (`ali-coins-rust:latest` + binário
+12:31) reproduziu o travamento: após a tarefa "Browse surprise items" (toques
+seguem não registrados pelo site: `tracking=63->63`), a gaveta não reabriu. O
+diagnóstico novo capturou:
+
+- URL correta (`https://m.aliexpress.com/p/coin-index/index.html?_immersiveMode=true&from=pc302`);
+- `título=""` e corpo com a tela de check-in ("Blind Box", "day streak", dígitos);
+- screenshots `scratch/tasks-drawer-falha-*.png` mostrando a central **sem o
+  botão "Ganhe mais moedas"** — estado do site, não lock nem crash.
+
+Reforços aplicados (commit `40a9ff8`):
+
+- `open_task_drawer` tenta **clique real de mouse** no centro do botão
+  (equivalente ao `taskBtn.click()` do Playwright), além do clique via JS;
+- `get_drawer_tasks_with_retry` **recarrega a central uma vez**
+  (`location.reload()`) quando a gaveta não abre, resetando o estado antes das
+  próximas tentativas;
+- Nas falhas anteriores (30/09 e 01/10), o runner encerrava a etapa após ~2 min
+  de retries — agora há recuperação ativa.
 
 ## D-02 residual — sessão importada expirada (01/10/2026) — validado com fixtures
 
