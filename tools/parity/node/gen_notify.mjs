@@ -48,10 +48,19 @@ const push = (name, event, options = {}) => {
     customMessage: options.customMessage ?? null,
     hostname: HOST
   });
+  // Erros podem ser objetos com `isImportedSessionExpired` (produtores do oráculo);
+  // serializa de forma estável para o teste em Rust reproduzir as entradas.
+  const errorFixture =
+    options.error && typeof options.error === 'object'
+      ? {
+          message: options.error.message ?? null,
+          isImportedSessionExpired: Boolean(options.error.isImportedSessionExpired)
+        }
+      : (options.error ?? null);
   cases.push({
     name,
     event,
-    error: options.error ?? null,
+    error: errorFixture,
     // Sem report o resolveUser do oráculo devolve null (nenhuma linha de conta).
     user: options.report ? (options.user ?? USER_MASKED) : null,
     previousStreakDays: options.previousStreakDays ?? null,
@@ -70,6 +79,15 @@ push('lock_active_sem_erro', 'lock_active');
 push('failure_simples', 'failure', { error: 'Falha na execução: Request timed out' });
 push('failure_com_segredo', 'failure', {
   error: 'GET https://x/y?token=abc123&session=zzz falhou'
+});
+push('failure_sessao_remota_flag', 'failure', {
+  error: { message: 'Falha ao efetuar o login remoto.', isImportedSessionExpired: true }
+});
+push('failure_sessao_remota_regex', 'failure', {
+  error: 'A sessão importada de outro host expirou ou foi invalidada pelo AliExpress.'
+});
+push('failure_export_session_hint', 'failure', {
+  error: 'Gere nova sessão executando node export_session.js no servidor de origem.'
 });
 push('streak_break', 'streak_break', {
   report: { checkin: { previousStreakDays: 226, streakDays: 1, totalBalance: '150' } },
@@ -142,6 +160,29 @@ cases.push({
     report: multiFailureReport,
     event: 'failure',
     error: 'Falha na navegação: timeout',
+    hostname: HOST
+  })
+});
+const multiImportedReport = report.buildMultiAccountReportPayload(
+  [
+    {
+      account: { maskedUser: 'conta1***@gmail.com' },
+      error: 'Sessão expirou ou exige login.',
+      isImportedSessionExpired: true
+    },
+    accountResults[1]
+  ],
+  multiMeta
+);
+cases.push({
+  name: 'multi_failure_sessao_remota',
+  event: 'failure',
+  error: 'Sessão expirou ou exige login.',
+  report: multiImportedReport,
+  message: notify.buildMessage({
+    report: multiImportedReport,
+    event: 'failure',
+    error: 'Sessão expirou ou exige login.',
     hostname: HOST
   })
 });

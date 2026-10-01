@@ -278,6 +278,10 @@ pub fn run(args: &[String]) -> StdExitCode {
         }
     };
 
+    // Estado de sessão importada para o alerta de falha (fallback do oráculo).
+    let meta_imported =
+        ali_coins_core::session::session_meta_is_imported(&account.session_meta_path);
+
     let runtime = match tokio::runtime::Runtime::new() {
         Ok(runtime) => runtime,
         Err(error) => {
@@ -806,11 +810,23 @@ pub fn run(args: &[String]) -> StdExitCode {
                         timeout_ms: config.telegram_timeout_ms,
                         api_base: String::new(),
                     };
+                    let imported_session_expired =
+                        ali_coins_core::notify::telegram::detect_imported_session_expired(
+                            Some(error.as_str()),
+                            meta_imported,
+                        );
+                    if imported_session_expired {
+                        logging::global().error(
+                            "[Sessão Remota Expirada] Falha durante a execução: a sessão importada expirou ou foi invalidada pelo AliExpress. Gere uma nova sessão executando \"node export_session.js\" no servidor de origem e importe-a com \"node import_session.js\".",
+                            &[],
+                        );
+                    }
                     let context = TelegramContext {
                         user: Some(account.masked_user.as_str()),
                         error: Some(error.as_str()),
                         host: Some(host.as_str()),
                         version: Some(env!("CARGO_PKG_VERSION")),
+                        imported_session_expired,
                         ..TelegramContext::default()
                     };
                     // Eventos dedicados como no oráculo (2FA/captcha/falha genérica).

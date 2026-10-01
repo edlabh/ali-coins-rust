@@ -50,6 +50,23 @@ pub struct CaptchaCooldown {
     pub until: Option<String>,
 }
 
+/// Informa se o `session_meta.json` aponta sessão importada de outro host
+/// (fallback do `checkIfImportedSessionExpired`; nunca falha).
+#[must_use]
+pub fn session_meta_is_imported(path: &Path) -> bool {
+    let Ok(raw) = std::fs::read_to_string(path) else {
+        return false;
+    };
+    let Ok(meta) = serde_json::from_str::<SessionMeta>(&raw) else {
+        return false;
+    };
+    meta.is_imported.unwrap_or(false)
+        || meta
+            .imported_at
+            .as_deref()
+            .is_some_and(|value| !value.is_empty())
+}
+
 /// Lê `.enc`/`.json` + meta, aplicando migrações e rotação de chave.
 pub fn load_session_files(
     options: &SessionOptions,
@@ -896,5 +913,28 @@ mod tests {
 
         let cleared = clear_captcha_challenge(&options, dir.path()).expect("clear");
         assert!(cleared.last_captcha_at.is_none());
+    }
+
+    #[test]
+    fn detecta_sessao_importada_no_meta() {
+        let dir = tempfile::tempdir().expect("dir");
+        let path = dir.path().join("session_meta.json");
+
+        // Ausente/ilegível → false.
+        assert!(!session_meta_is_imported(&path));
+        std::fs::write(&path, "não é json").expect("escreve");
+        assert!(!session_meta_is_imported(&path));
+
+        // `isImported: true` → true.
+        std::fs::write(&path, r#"{"isImported":true}"#).expect("escreve");
+        assert!(session_meta_is_imported(&path));
+
+        // `importedAt` preenchido → true.
+        std::fs::write(&path, r#"{"importedAt":"2026-09-30T12:00:00.000Z"}"#).expect("escreve");
+        assert!(session_meta_is_imported(&path));
+
+        // `importedAt` vazio/ausente → false (truthiness do JS).
+        std::fs::write(&path, r#"{"isImported":false,"importedAt":""}"#).expect("escreve");
+        assert!(!session_meta_is_imported(&path));
     }
 }
