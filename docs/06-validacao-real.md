@@ -301,6 +301,13 @@ desktop, tanto no check-in quanto nas tarefas (como o oráculo):
   `docker` (semanal, PRs agrupados para minor/patch).
 - **Dockerfile**: `ARG CARGO_BUILD_JOBS=1` e `CARGO_PROFILE_RELEASE_LTO=false`
   por padrão, permitindo build da imagem na VPS de baixa memória.
+- **Imagem própria no runner da VM (01/10)**: `ali-coins-rust:latest` (201 MB) gerada a
+  partir do binário pré-compilado (`Dockerfile.runtime` + `wrappers/build-runtime-image.sh`);
+  `docker-run.sh`/`run.sh` da VM usam a imagem com `--entrypoint /data/ali-coins` (binário
+  montado) e `ENTRYPOINT ["ali-coins"]` na imagem. Tempos medidos na VPS (1 vCPU):
+  binário incremental **5m47s**, imagem de runtime **26s** (primeira) e **4s** (seguinte);
+  o build completo (CI) usa `codegen-units=16`, `LTO=false` e cache do BuildKit.
+  O smoke do CI foi corrigido para não mascarar o exit code do container (`| head`).
 
 ## Recuperação da página principal nas tarefas (01/10/2026)
 

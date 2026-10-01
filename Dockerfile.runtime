@@ -44,4 +44,7 @@ HEALTHCHECK --interval=10m --timeout=30s --start-period=90s --retries=5 \
     CMD ["ali-coins", "--dry-run", "--json"]
 
 STOPSIGNAL SIGTERM
-CMD ["ali-coins", "--dry-run", "--json"]
+# ENTRYPOINT no binário da imagem: `docker run imagem checkin --json` funciona
+# direto. Para rodar um binário montado do host, use `--entrypoint /data/ali-coins`.
+ENTRYPOINT ["ali-coins"]
+CMD ["--dry-run", "--json"]
