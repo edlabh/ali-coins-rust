@@ -36,3 +36,9 @@ lto = "thin"
 codegen-units = 1
 strip = "symbols"
 panic = "unwind"
+
+# Crate de tipos gerados do CDP (dezenas de milhares de linhas): otimizar a
+# -O3 consumia >500 MB e travava builds em VPS de 1 vCPU/1 GB. -O1 mantém o
+# runtime adequado (a serialização não é o gargalo) e reduz muito o build.
+[profile.release.package.chromiumoxide_cdp]
+opt-level = 1
