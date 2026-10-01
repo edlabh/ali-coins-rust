@@ -356,6 +356,18 @@ pub async fn run_tasks(
             }
             let page: &dyn Page = owned_page.as_deref().unwrap_or(initial_page);
             last_tasks.clone_from(&tasks);
+            ali_coins_core::logging::global().info(
+                &format!(
+                    "Painel de tarefas ({}): {}",
+                    tasks.len(),
+                    tasks
+                        .iter()
+                        .map(|task| format!("{} [{}]", task.title, task.btn_text))
+                        .collect::<Vec<_>>()
+                        .join(" | ")
+                ),
+                &[],
+            );
 
             if tasks.is_empty() {
                 ali_coins_core::logging::global().info(

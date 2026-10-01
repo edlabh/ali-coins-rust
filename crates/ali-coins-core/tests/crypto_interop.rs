@@ -150,5 +150,5 @@ fn parser_aceita_campos_extras_apos_o_ciphertext() {
     let valid_v3 = doc["tokens"]["v3"].as_str().expect("v3");
     let with_extra = format!("{valid_v3}:lixo:extra");
     let parsed = parse_session_token(&with_extra).expect("campos extras são ignorados");
-    assert!(!parsed.ciphertext.is_empty());
+    assert_ne!(parsed.ciphertext.len(), 0);
 }

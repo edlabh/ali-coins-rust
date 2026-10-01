@@ -331,7 +331,7 @@ mod tests {
                 .starts_with("/tmp/session.json")
         );
         assert_eq!(accounts[0].index, 1);
-        assert!(!expected.is_empty());
+        assert_ne!(expected, "");
     }
 
     #[test]

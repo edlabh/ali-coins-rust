@@ -714,7 +714,7 @@ mod tests {
         assert!(guard.path().exists());
         let data = guard.data().clone();
         assert_eq!(data.pid, std::process::id());
-        assert!(!data.lock_id.is_empty());
+        assert_ne!(data.lock_id, "");
 
         #[cfg(unix)]
         {
