@@ -377,6 +377,23 @@ tentativas" e segue). Correções (commit `88b0054`):
   cada leitura (ex.: confirmar se "Coupons & shopping credits for you!" estava
   presente).
 
+## Validação local e causa provável do D-10 (01/10, tarde — máquina do operador)
+
+Execuções na máquina local (rede residencial) e comparação direta com o oráculo
+Node (mesma sessão importada da VM):
+
+- O **oráculo local abriu a gaveta e executou as tarefas**; a surpresa falhou
+  com "sem progresso após 3 tentativas" (mesmo comportamento da VM).
+- O **port não abria a gaveta** mesmo clicando no botão correto
+  (`button.aecoin-signButton-13WeJ`, `elementFromPoint` no próprio botão).
+- Causa: a emulação `Emulation.setEmitTouchEventsForMouse` (mobile) converte
+  **todo input de mouse em toque**; o Playwright emite **mouse** em `click()` e
+  toque apenas em `tap()`. Com a conversão o site ignorava o clique.
+- Correção: conversão **desligada por padrão** (`PW_EMIT_TOUCH=1` reativa);
+  validado localmente — a gaveta abre e o painel é lido (exit 2, sem ações
+  pendentes no dia). Isso deve explicar também o `tracking=N->N` da surpresa no
+  port (os toques viravam eventos de toque), a confirmar no próximo ciclo.
+
 ## D-02 residual — sessão importada expirada (01/10/2026) — validado com fixtures
 
 Fechado o último item funcional de notificação: o `failure` de conta única passa a

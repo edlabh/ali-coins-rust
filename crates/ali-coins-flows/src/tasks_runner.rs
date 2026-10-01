@@ -252,6 +252,8 @@ pub async fn run_tasks(
     ensure_coin_page(initial_page, options.nav_timeout).await?;
     let _ = crate::navigation::close_modals(page).await;
     if !open_task_drawer(page, options.open_drawer_timeout).await {
+        // Diagnóstico best-effort da abertura inicial (URL, corpo, screenshot).
+        crate::tasks_verifier::log_drawer_failure_diagnostics(page).await;
         return Err(TasksError::DrawerMissing);
     }
 
