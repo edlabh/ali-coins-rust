@@ -25,7 +25,7 @@ pub use storage_filter::{filter_storage_state, is_allowed_storage_key, should_fi
 pub use store::{
     ImportOutcome, LoadedSession, SavedSession, clear_session, export_session_token,
     get_captcha_cooldown, import_session_token, load_session_files, mark_session_imported,
-    record_captcha_challenge, save_session, update_session_streak,
+    record_captcha_challenge, save_session, session_meta_is_imported, update_session_streak,
 };
 
 use std::path::PathBuf;

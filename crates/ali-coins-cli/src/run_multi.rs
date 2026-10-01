@@ -10,7 +10,9 @@
 use crate::export_import::bootstrap;
 use ali_coins_core::config::{Account, EnvSource};
 use ali_coins_core::exit::ExitCode;
-use ali_coins_core::notify::telegram::build_multi_account_message_at;
+use ali_coins_core::notify::telegram::{
+    build_multi_account_message_at, detect_imported_session_expired,
+};
 use ali_coins_core::notify::{
     HeartbeatAction, SafeHttpClient, TelegramConfig, TelegramContext, TelegramEvent, build_message,
     send_telegram,
@@ -37,6 +39,8 @@ pub struct AccountExecution {
     pub error: Option<String>,
     /// Payload `unified_report` da conta (quando houver).
     pub payload: Option<Value>,
+    /// `session_meta.json` da conta aponta sessão importada (pré-execução).
+    pub meta_imported: bool,
     /// Início/fim/dduração.
     pub start_time: DateTime<Utc>,
     pub end_time: DateTime<Utc>,
@@ -226,6 +230,9 @@ fn random_fraction() -> f64 {
 /// Executa o filho `all` para uma conta (produção).
 fn run_account_child(account: &Account, force: bool) -> AccountExecution {
     let start = Utc::now();
+    // Lido antes do filho: o flag de sessão importada é do estado inicial da conta.
+    let meta_imported =
+        ali_coins_core::session::session_meta_is_imported(&account.session_meta_path);
     let mut command = match std::env::current_exe() {
         Ok(exe) => Command::new(exe),
         Err(error) => {
@@ -283,6 +290,7 @@ fn run_account_child(account: &Account, force: bool) -> AccountExecution {
                 exit_code,
                 error,
                 payload,
+                meta_imported,
                 start_time: start,
                 end_time: end,
                 duration,
@@ -294,6 +302,7 @@ fn run_account_child(account: &Account, force: bool) -> AccountExecution {
             exit_code: 1,
             error: Some(format!("Falha ao executar a conta: {error}")),
             payload: None,
+            meta_imported,
             start_time: start,
             end_time: end,
             duration,
@@ -381,6 +390,10 @@ pub fn build_multi_payload(
                 checkin_result,
                 tasks_result,
                 error: execution.error.clone(),
+                is_imported_session_expired: Some(detect_imported_session_expired(
+                    execution.error.as_deref(),
+                    execution.meta_imported,
+                )),
                 start_time: Some(execution.start_time.to_rfc3339()),
                 end_time: Some(execution.end_time.to_rfc3339()),
                 duration: Some(execution.duration.clone()),
@@ -639,5 +652,21 @@ mod tests {
         assert_eq!(payload["meta"]["totalAccounts"], 2);
         assert_eq!(payload["meta"]["successfulAccounts"], 1);
         assert_eq!(payload["accounts"][1]["error"], "falha");
+    }
+
+    #[test]
+    fn payload_multi_marca_sessao_importada_expirada() {
+        let start = Utc::now();
+        let imported = AccountExecution {
+            error: Some(
+                "Erro ao efetuar o login: não foi possível obter streak e saldo".to_string(),
+            ),
+            meta_imported: true,
+            ..execution("a@example.com", 1, None)
+        };
+        let sem_meta = execution("b@example.com", 1, Some("Navigation timeout"));
+        let payload = build_multi_payload(&[imported, sem_meta], start, start);
+        assert_eq!(payload["accounts"][0]["isImportedSessionExpired"], true);
+        assert_eq!(payload["accounts"][1]["isImportedSessionExpired"], false);
     }
 }

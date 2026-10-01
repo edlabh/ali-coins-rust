@@ -100,6 +100,120 @@ pub struct TelegramContext<'a> {
     pub host: Option<&'a str>,
     /// Versão (rodapé).
     pub version: Option<&'a str>,
+    /// Falha associada a sessão importada expirada
+    /// (`checkIfImportedSessionExpired` do oráculo).
+    pub imported_session_expired: bool,
+}
+
+/// Entradas do check de "sessão importada expirada" (port de
+/// `checkIfImportedSessionExpired`).
+#[allow(clippy::struct_excessive_bools)]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ImportedSessionCheck<'a> {
+    /// Mensagem do erro.
+    pub error_message: Option<&'a str>,
+    /// Flag estruturada no erro (`err.isImportedSessionExpired`).
+    pub error_flag: bool,
+    /// Flag no relatório (`report.isImportedSessionExpired`).
+    pub report_flag: bool,
+    /// Flags por conta (`accounts[].isImportedSessionExpired`).
+    pub account_flags: &'a [bool],
+    /// Relatório multi-conta (desliga o fallback pelo `session_meta.json`).
+    pub report_is_multi: bool,
+    /// `session_meta.json` indica sessão importada.
+    pub meta_imported: bool,
+}
+
+/// Decide se a falha é de sessão importada expirada, na ordem do oráculo:
+/// flags → padrão de mensagem → fallback pelo meta (só conta única).
+#[must_use]
+pub fn check_imported_session_expired(check: &ImportedSessionCheck<'_>) -> bool {
+    if check.error_flag || check.report_flag || check.account_flags.iter().any(|flag| *flag) {
+        return true;
+    }
+    let message = check.error_message.unwrap_or("");
+    if message_matches_remote_session(message) {
+        return true;
+    }
+    if check.report_is_multi {
+        return false;
+    }
+    check.meta_imported && message_matches_auth_context(message)
+}
+
+/// `/sessão.*(importada|remota).*expir/i` ou `/node export_session\.js/i`.
+fn message_matches_remote_session(message: &str) -> bool {
+    let lower = message.to_lowercase();
+    if let Some(start) = lower.find("sessão") {
+        let rest = &lower[start + "sessão".len()..];
+        let middle = [rest.find("importada"), rest.find("remota")]
+            .into_iter()
+            .flatten()
+            .min();
+        if let Some(middle) = middle {
+            if rest[middle..].contains("expir") {
+                return true;
+            }
+        }
+    }
+    lower.contains("node export_session.js")
+}
+
+/// `/login|autentic|sess[aã]o|streak|saldo|desafio|challenge/i`.
+fn message_matches_auth_context(message: &str) -> bool {
+    let lower = message.to_lowercase();
+    [
+        "login",
+        "autentic",
+        "sessao",
+        "sessão",
+        "streak",
+        "saldo",
+        "desafio",
+        "challenge",
+    ]
+    .iter()
+    .any(|needle| lower.contains(needle))
+}
+
+/// Regra dos produtores do oráculo (`collect.js`/`do_tasks.js`): sessão
+/// importada + erro de autenticação/navegação marca `isImportedSessionExpired`.
+#[must_use]
+pub fn imported_session_error_flag(error_message: Option<&str>, meta_imported: bool) -> bool {
+    if !meta_imported {
+        return false;
+    }
+    let Some(message) = error_message else {
+        return false;
+    };
+    let lower = message.to_lowercase();
+    [
+        "login",
+        "autentic",
+        "sessao",
+        "sessão",
+        "streak",
+        "saldo",
+        "desafio",
+        "challenge",
+        "cookie",
+        "navigat",
+    ]
+    .iter()
+    .any(|needle| lower.contains(needle))
+}
+
+/// Check observável completo para os fluxos do port (produtores + notify).
+#[must_use]
+pub fn detect_imported_session_expired(error_message: Option<&str>, meta_imported: bool) -> bool {
+    check_imported_session_expired(&ImportedSessionCheck {
+        error_message,
+        error_flag: imported_session_error_flag(error_message, meta_imported),
+        report_flag: false,
+        account_flags: &[],
+        report_is_multi: false,
+        meta_imported,
+    })
 }
 
 /// Resultado do envio (nunca lança).
@@ -380,6 +494,18 @@ pub fn build_message_at(
             ];
             if ctx.user.is_some() {
                 lines.push(user_line.clone());
+            }
+            if ctx.imported_session_expired {
+                lines.push(String::new());
+                lines.push("⚠️ <b>Aviso de Sessão Remota:</b>".to_string());
+                lines.push(
+                    "A sessão em uso foi importada de outro host (via <code>import_session.js</code>) e parece ter expirado ou sido invalidada pelo AliExpress."
+                        .to_string(),
+                );
+                lines.push(
+                    "💡 <i>Ação necessária:</i> É necessário gerar uma nova sessão executando <code>node export_session.js</code> no servidor de origem e importá-la neste host com <code>node import_session.js</code>."
+                        .to_string(),
+                );
             }
             lines.push(format!("🖥️ <b>Host:</b> <code>{host}</code>"));
             lines.join("\n")
@@ -681,9 +807,36 @@ pub fn build_multi_account_message_at(
             escape_html(&duration)
         ));
     }
-    if error.is_some_and(|value| {
-        value.to_lowercase().contains("sessão") && value.to_lowercase().contains("expir")
-            || value.to_lowercase().contains("export_session")
+    let report_flag = report
+        .get("isImportedSessionExpired")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let account_flags: Vec<bool> = report
+        .get("accounts")
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .map(|item| {
+                    item.get("isImportedSessionExpired")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false)
+                        || item
+                            .get("error")
+                            .and_then(|error| error.get("isImportedSessionExpired"))
+                            .and_then(Value::as_bool)
+                            .unwrap_or(false)
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    if check_imported_session_expired(&ImportedSessionCheck {
+        error_message: error,
+        error_flag: false,
+        report_flag,
+        account_flags: &account_flags,
+        report_is_multi: true,
+        meta_imported: false,
     }) {
         lines.push(String::new());
         lines.push("⚠️ <b>Aviso de Sessão Remota:</b>".to_string());
@@ -1087,6 +1240,7 @@ mod tests {
             host: Some("vps-1"),
             version: Some("0.1.0"),
             coins_gained: Some(35),
+            imported_session_expired: false,
         };
         let success = build_message(TelegramEvent::Success, &ctx);
         assert!(success.contains("🔔 <b>AliExpress Moedas - Notificação</b>"));
@@ -1224,5 +1378,142 @@ mod tests {
         assert!(message.contains("⏱️ Duração: 1m 20s"));
         // Check-in com 2 dias → 15 moedas pelo oráculo.
         assert!(message.contains("🪙 Ganhas hoje: +15 moedas (check-in +15 / tarefas +0)"));
+    }
+
+    fn check(
+        message: Option<&str>,
+        error_flag: bool,
+        meta_imported: bool,
+    ) -> ImportedSessionCheck<'_> {
+        ImportedSessionCheck {
+            error_message: message,
+            error_flag,
+            report_flag: false,
+            account_flags: &[],
+            report_is_multi: false,
+            meta_imported,
+        }
+    }
+
+    #[test]
+    fn sessao_importada_por_flags_e_regex() {
+        // Flag estruturada no erro.
+        assert!(check_imported_session_expired(&ImportedSessionCheck {
+            error_flag: true,
+            ..check(None, false, false)
+        }));
+        // Flag no relatório.
+        assert!(check_imported_session_expired(&ImportedSessionCheck {
+            report_flag: true,
+            ..check(None, false, false)
+        }));
+        // Flag em qualquer conta.
+        assert!(check_imported_session_expired(&ImportedSessionCheck {
+            account_flags: &[false, true, false],
+            ..check(None, false, false)
+        }));
+        // `/sessão.*(importada|remota).*expir/i` (case-insensitive).
+        assert!(check_imported_session_expired(&check(
+            Some("A SESSÃO IMPORTADA de outro host EXPIROU"),
+            false,
+            false
+        )));
+        assert!(check_imported_session_expired(&check(
+            Some("Sessão remota expirou"),
+            false,
+            false
+        )));
+        // `/node export_session\.js/i`.
+        assert!(check_imported_session_expired(&check(
+            Some("Gere nova sessão com node export_session.js"),
+            false,
+            false
+        )));
+        // Negativos.
+        assert!(!check_imported_session_expired(&check(
+            Some("Request timed out"),
+            false,
+            false
+        )));
+        assert!(!check_imported_session_expired(&check(
+            Some("A sessão expirou"),
+            false,
+            false
+        )));
+    }
+
+    #[test]
+    fn sessao_importada_fallback_pelo_meta() {
+        // Meta importado + erro de autenticação → alerta (conta única).
+        assert!(check_imported_session_expired(&check(
+            Some("Erro ao efetuar o login: não foi possível obter streak e saldo"),
+            false,
+            true
+        )));
+        // Sem meta importado → não alerta.
+        assert!(!check_imported_session_expired(&check(
+            Some("Erro ao efetuar o login"),
+            false,
+            false
+        )));
+        // Multi-conta desliga o fallback pelo meta (ordem do oráculo).
+        assert!(!check_imported_session_expired(&ImportedSessionCheck {
+            report_is_multi: true,
+            ..check(Some("Erro ao efetuar o login"), false, true)
+        }));
+        // Erro não relacionado a autenticação → não alerta mesmo com meta.
+        assert!(!check_imported_session_expired(&check(
+            Some("Request timed out"),
+            false,
+            true
+        )));
+    }
+
+    #[test]
+    fn produtor_marca_sessao_importada_em_erros_de_navegacao() {
+        // Padrão dos produtores inclui cookie/navigat além do fallback do notify.
+        assert!(imported_session_error_flag(
+            Some("Navigation timeout"),
+            true
+        ));
+        assert!(imported_session_error_flag(Some("Cookie inválido"), true));
+        assert!(imported_session_error_flag(Some("Erro de login"), true));
+        assert!(!imported_session_error_flag(Some("Erro de login"), false));
+        assert!(!imported_session_error_flag(Some("timeout"), true));
+
+        assert!(detect_imported_session_expired(
+            Some("Erro ao efetuar o login"),
+            true
+        ));
+        assert!(!detect_imported_session_expired(
+            Some("Erro ao efetuar o login"),
+            false
+        ));
+    }
+
+    #[test]
+    fn failure_inclui_aviso_de_sessao_remota() {
+        let base = TelegramContext {
+            user: Some("fulano@example.com"),
+            error: Some("Sessão expirou ou exige login."),
+            host: Some("vps-1"),
+            version: Some("0.1.0"),
+            ..TelegramContext::default()
+        };
+        let sem_aviso = build_message(TelegramEvent::Failure, &base);
+        assert!(!sem_aviso.contains("Aviso de Sessão Remota"));
+
+        let com_aviso = build_message(
+            TelegramEvent::Failure,
+            &TelegramContext {
+                imported_session_expired: true,
+                ..base
+            },
+        );
+        assert!(com_aviso.contains("⚠️ <b>Aviso de Sessão Remota:</b>"));
+        assert!(com_aviso.contains(
+            "A sessão em uso foi importada de outro host (via <code>import_session.js</code>)"
+        ));
+        assert!(com_aviso.contains("<code>node export_session.js</code>"));
     }
 }

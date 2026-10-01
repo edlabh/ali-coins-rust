@@ -286,6 +286,23 @@ desktop, tanto no check-in quanto nas tarefas (como o oráculo):
   (`alreadyCollected=false`, `streakDays 3→4`) e o saldo pós-check-in foi
   sincronizado (`1128`) enquanto o extrato não refletia o crédito.
 
+## D-02 residual — sessão importada expirada (01/10/2026) — validado com fixtures
+
+Fechado o último item funcional de notificação: o `failure` de conta única passa a
+exibir o bloco **"Aviso de Sessão Remota"** nas mesmas condições do oráculo.
+
+- `check_imported_session_expired` (puro, em `core::notify::telegram`): flags no
+  erro/relatório/por conta → regex `/sessão.*(importada|remota).*expir/i` ou
+  `/node export_session\.js/i` → fallback pelo `session_meta.json`
+  (`isImported`/`importedAt` + erro de autenticação), desligado em multi-conta.
+- Produtores replicados (`collect.js`/`do_tasks.js`): `detect_imported_session_expired`
+  marca sessão importada + erro de login/navegação; `run_multi` grava o flag por
+  conta no payload; `tasks` avulso agora notifica falha/2FA/captcha como o `do_tasks.js`.
+- **Fixtures**: `notify.json` subiu de 13 para **17 casos** (flag estruturada, regex,
+  `export_session.js` e multi-conta com conta importada) — `notify_interop` verde
+  byte-a-byte contra o oráculo.
+- Testes unitários: `check`/produtor/aviso no `failure` + leitura do meta.
+
 ## D-03 — trace CDP (30/09/2026) — validado com testes e smoke opt-in
 
 Implementado o trace CDP (`Tracing.start/end`) com as regras do oráculo para

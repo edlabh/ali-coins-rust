@@ -4,7 +4,8 @@
 //! (gere com `./tools/parity/generate-fixtures.sh`).
 
 use ali_coins_core::notify::telegram::{
-    TelegramContext, TelegramEvent, build_message_at, build_multi_account_message_at,
+    ImportedSessionCheck, TelegramContext, TelegramEvent, build_message_at,
+    build_multi_account_message_at, check_imported_session_expired,
 };
 use chrono::{DateTime, Utc};
 use serde_json::Value;
@@ -55,7 +56,19 @@ fn mensagens_do_telegram_iguais_ao_oraculo() {
         let name = case["name"].as_str().expect("nome");
         let event = event_from(case["event"].as_str().expect("evento"));
         let user = case["user"].as_str();
-        let error = case["error"].as_str();
+        // O erro pode ser string (mensagem) ou objeto com flag estruturada,
+        // como nos produtores do oráculo (`err.isImportedSessionExpired`).
+        let (error, error_flag) = match case.get("error") {
+            Some(Value::String(text)) => (Some(text.as_str()), false),
+            Some(Value::Object(object)) => (
+                object.get("message").and_then(Value::as_str),
+                object
+                    .get("isImportedSessionExpired")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false),
+            ),
+            _ => (None, false),
+        };
         let previous = case
             .get("previousStreakDays")
             .and_then(Value::as_i64)
@@ -71,6 +84,23 @@ fn mensagens_do_telegram_iguais_ao_oraculo() {
         let produced = if let Some(report) = case.get("report").filter(|value| !value.is_null()) {
             build_multi_account_message_at(report, event, error, &host, &version, now)
         } else {
+            let report_flag = case
+                .get("report")
+                .and_then(|report| report.get("isImportedSessionExpired"))
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            let meta_imported = case
+                .get("metaImported")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            let imported = check_imported_session_expired(&ImportedSessionCheck {
+                error_message: error,
+                error_flag,
+                report_flag,
+                account_flags: &[],
+                report_is_multi: false,
+                meta_imported,
+            });
             let context = TelegramContext {
                 user,
                 total_balance: balance,
@@ -79,6 +109,7 @@ fn mensagens_do_telegram_iguais_ao_oraculo() {
                 error,
                 host: Some(host.as_str()),
                 version: Some(version.as_str()),
+                imported_session_expired: imported,
                 ..TelegramContext::default()
             };
             build_message_at(event, &context, now)

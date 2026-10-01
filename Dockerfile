@@ -1,10 +1,15 @@
 # Build multi-stage do ali-coins-rust.
 # Estágio 1: compila o binário com o workspace completo.
+# Os args permitem build de baixa memória na VPS (jobs=1, LTO desligado).
 FROM rust:1.85-bookworm AS builder
+ARG CARGO_BUILD_JOBS=1
+ARG CARGO_PROFILE_RELEASE_LTO=false
+ENV CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS} \
+    CARGO_PROFILE_RELEASE_LTO=${CARGO_PROFILE_RELEASE_LTO}
 WORKDIR /src
 COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
 COPY crates ./crates
-# Build de release (LTO thin definido no perfil do workspace).
+# Build de release (LTO configurável; default desligado para caber na VPS).
 RUN cargo build --release -p ali-coins-cli
 
 # Estágio 2: runtime mínimo, sem toolchain, com as libs do Chromium.

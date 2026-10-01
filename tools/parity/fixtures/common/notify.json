@@ -65,6 +65,39 @@
       "message": "🔴 ali-coins — 30/09/2026 08:00:00\n⚠️ <b>Erro:</b> <code>GET https://x/y?token=[REDACTED]&amp;session=[REDACTED] falhou</code>\n🖥️ <b>Host:</b> <code>vm-ali-rust (v1.7.1)</code>"
     },
     {
+      "name": "failure_sessao_remota_flag",
+      "event": "failure",
+      "error": {
+        "message": "Falha ao efetuar o login remoto.",
+        "isImportedSessionExpired": true
+      },
+      "user": null,
+      "previousStreakDays": null,
+      "streakDays": null,
+      "totalBalance": null,
+      "message": "🔴 ali-coins — 30/09/2026 08:00:00\n⚠️ <b>Erro:</b> <code>Falha ao efetuar o login remoto.</code>\n\n⚠️ <b>Aviso de Sessão Remota:</b>\nA sessão em uso foi importada de outro host (via <code>import_session.js</code>) e parece ter expirado ou sido invalidada pelo AliExpress.\n💡 <i>Ação necessária:</i> É necessário gerar uma nova sessão executando <code>node export_session.js</code> no servidor de origem e importá-la neste host com <code>node import_session.js</code>.\n🖥️ <b>Host:</b> <code>vm-ali-rust (v1.7.1)</code>"
+    },
+    {
+      "name": "failure_sessao_remota_regex",
+      "event": "failure",
+      "error": "A sessão importada de outro host expirou ou foi invalidada pelo AliExpress.",
+      "user": null,
+      "previousStreakDays": null,
+      "streakDays": null,
+      "totalBalance": null,
+      "message": "🔴 ali-coins — 30/09/2026 08:00:00\n⚠️ <b>Erro:</b> <code>A sessão importada de outro host expirou ou foi invalidada pelo AliExpress.</code>\n\n⚠️ <b>Aviso de Sessão Remota:</b>\nA sessão em uso foi importada de outro host (via <code>import_session.js</code>) e parece ter expirado ou sido invalidada pelo AliExpress.\n💡 <i>Ação necessária:</i> É necessário gerar uma nova sessão executando <code>node export_session.js</code> no servidor de origem e importá-la neste host com <code>node import_session.js</code>.\n🖥️ <b>Host:</b> <code>vm-ali-rust (v1.7.1)</code>"
+    },
+    {
+      "name": "failure_export_session_hint",
+      "event": "failure",
+      "error": "Gere nova sessão executando node export_session.js no servidor de origem.",
+      "user": null,
+      "previousStreakDays": null,
+      "streakDays": null,
+      "totalBalance": null,
+      "message": "🔴 ali-coins — 30/09/2026 08:00:00\n⚠️ <b>Erro:</b> <code>Gere nova sessão executando node export_session.js no servidor de origem.</code>\n\n⚠️ <b>Aviso de Sessão Remota:</b>\nA sessão em uso foi importada de outro host (via <code>import_session.js</code>) e parece ter expirado ou sido invalidada pelo AliExpress.\n💡 <i>Ação necessária:</i> É necessário gerar uma nova sessão executando <code>node export_session.js</code> no servidor de origem e importá-la neste host com <code>node import_session.js</code>.\n🖥️ <b>Host:</b> <code>vm-ali-rust (v1.7.1)</code>"
+    },
+    {
       "name": "streak_break",
       "event": "streak_break",
       "error": null,
@@ -227,6 +260,62 @@
         }
       },
       "message": "🔴 <b>AliExpress Moedas - Multi-Conta (Falha) — 30/09/2026</b>\n📊 <b>Resumo:</b> 1/2 contas processadas com sucesso\n\n[1] <code>conta1***@gmail.com</code>: 💰 <b>196 moedas</b> | 🪙 +86 (+40/+46) | Streak: 226 dias\n[2] <code>conta2***@gmail.com</code>: ❌ Falha (Falha na navegação: timeout)\n\n📅 <b>Agenda:</b>\n[1] <code>conta1***@gmail.com</code>: 07:50:00 → 07:56:30 (última)\n\n⏱️ <b>Duração Total:</b> 10m 00s\n📅 <b>Data:</b> 30/09/2026 08:00:00\n🖥️ <b>Host:</b> <code>vm-ali-rust (v1.7.1)</code>"
+    },
+    {
+      "name": "multi_failure_sessao_remota",
+      "event": "failure",
+      "error": "Sessão expirou ou exige login.",
+      "report": {
+        "type": "multi_account_report",
+        "accounts": [
+          {
+            "user": "conta1***@gmail.com",
+            "checkin": null,
+            "tasks": null,
+            "error": "Sessão expirou ou exige login.",
+            "isImportedSessionExpired": true,
+            "meta": {
+              "finalBalance": "N/D",
+              "totalCoinsGained": 0,
+              "checkinCoinsGained": 0,
+              "tasksCoinsGained": 0
+            }
+          },
+          {
+            "user": "conta2***@gmail.com",
+            "checkin": {
+              "alreadyCollected": true,
+              "streakDays": 12,
+              "totalBalance": "88",
+              "duration": "1m 02s"
+            },
+            "tasks": {
+              "coinsGained": 0,
+              "finalCoins": "88 moedas",
+              "duration": "2m 00s"
+            },
+            "isImportedSessionExpired": false,
+            "startTime": "2026-09-30T14:57:00.000Z",
+            "endTime": "2026-09-30T15:00:00.000Z",
+            "nextAccountAt": null,
+            "duration": "3m 00s",
+            "meta": {
+              "finalBalance": "88 moedas",
+              "totalCoinsGained": 0,
+              "checkinCoinsGained": 0,
+              "tasksCoinsGained": 0
+            }
+          }
+        ],
+        "meta": {
+          "startTime": "2026-09-30T14:50:00.000Z",
+          "endTime": "2026-09-30T15:00:00.000Z",
+          "totalDuration": "10m 00s",
+          "totalAccounts": 2,
+          "successfulAccounts": 1
+        }
+      },
+      "message": "🔴 <b>AliExpress Moedas - Multi-Conta (Falha) — 30/09/2026</b>\n📊 <b>Resumo:</b> 1/2 contas processadas com sucesso\n\n[1] <code>conta1***@gmail.com</code>: ❌ Falha (Sessão expirou ou exige login.)\n[2] <code>conta2***@gmail.com</code>: 💰 <b>88 moedas</b> | 🪙 +0 (+0/+0) | Streak: 12 dias\n\n📅 <b>Agenda:</b>\n[1] <code>conta2***@gmail.com</code>: 07:57:00 → 08:00:00 (última)\n\n⏱️ <b>Duração Total:</b> 10m 00s\n\n⚠️ <b>Aviso de Sessão Remota:</b>\nUma ou mais contas utilizam sessão importada de outro host que parece ter expirado.\n💡 <i>Ação necessária:</i> Gere uma nova sessão com <code>node export_session.js</code> no servidor de origem e importe com <code>node import_session.js</code>.\n📅 <b>Data:</b> 30/09/2026 08:00:00\n🖥️ <b>Host:</b> <code>vm-ali-rust (v1.7.1)</code>"
     },
     {
       "name": "multi_already_collected",

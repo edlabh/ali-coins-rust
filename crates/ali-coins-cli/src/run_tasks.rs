@@ -5,8 +5,10 @@ use ali_coins_browser::cdp::CdpDriver;
 use ali_coins_browser::driver::{BrowserDriver as _, LaunchOptions};
 use ali_coins_browser::launch::{ChromiumArgsInput, build_chromium_args};
 use ali_coins_core::lock::{LockError, LockOptions, acquire};
+use ali_coins_core::notify::telegram::detect_imported_session_expired;
 use ali_coins_core::notify::{
-    SafeHttpClient, TelegramConfig, TelegramEvent, build_unified_report_message, send_telegram,
+    SafeHttpClient, TelegramConfig, TelegramContext, TelegramEvent, build_message,
+    build_unified_report_message, send_telegram,
 };
 use ali_coins_core::report::{NumOrText, TasksInput, UnifiedMeta, build_unified_report_payload};
 use ali_coins_core::session::{SessionOptions, load_session_files, save_session, validate_session};
@@ -61,6 +63,10 @@ pub fn run(args: &[String]) -> StdExitCode {
             return StdExitCode::from(1);
         }
     };
+
+    // Estado de sessão importada para o alerta de falha (fallback do oráculo).
+    let meta_imported =
+        ali_coins_core::session::session_meta_is_imported(&account.session_meta_path);
 
     let runtime = match tokio::runtime::Runtime::new() {
         Ok(runtime) => runtime,
@@ -310,7 +316,60 @@ pub fn run(args: &[String]) -> StdExitCode {
         .map_or_else(
             |error: String| {
                 logging::global().error(&format!("Falha nas tarefas: {error}"), &[]);
-                StdExitCode::from(u8::try_from(ExitCode::Failure.as_i32()).unwrap_or(1))
+                // Notifica a falha (best-effort), como o `do_tasks.js`.
+                if config.telegram_enabled {
+                    let timeout = Duration::from_millis(config.telegram_timeout_ms);
+                    let host = notify_host(&config);
+                    let chat_id = account
+                        .telegram_chat_id
+                        .clone()
+                        .unwrap_or_else(|| config.telegram_chat_id.clone());
+                    let telegram_config = TelegramConfig {
+                        enabled: true,
+                        bot_token: config.telegram_bot_token.clone(),
+                        chat_id,
+                        silent: config.telegram_silent,
+                        timeout_ms: config.telegram_timeout_ms,
+                        api_base: String::new(),
+                    };
+                    let imported_session_expired =
+                        detect_imported_session_expired(Some(error.as_str()), meta_imported);
+                    if imported_session_expired {
+                        logging::global().error(
+                            "[Sessão Remota Expirada] Falha na execução de tarefas: a sessão importada expirou. Sugestão: gere uma nova sessão com \"node export_session.js\" no servidor de origem e importe-a com \"node import_session.js\".",
+                            &[],
+                        );
+                    }
+                    let context = TelegramContext {
+                        user: Some(account.masked_user.as_str()),
+                        error: Some(error.as_str()),
+                        host: Some(host.as_str()),
+                        version: Some(env!("CARGO_PKG_VERSION")),
+                        imported_session_expired,
+                        ..TelegramContext::default()
+                    };
+                    let telegram_event = if error.contains("2FA") || error.contains("não-interativa")
+                    {
+                        TelegramEvent::TwoFactorRequired
+                    } else if error.to_lowercase().contains("captcha") {
+                        TelegramEvent::CaptchaRequired
+                    } else {
+                        TelegramEvent::Failure
+                    };
+                    let message = build_message(telegram_event, &context);
+                    runtime.block_on(async {
+                        if let Ok(client) =
+                            SafeHttpClient::new(config.allow_private_webhooks, timeout)
+                        {
+                            let _ = send_telegram(&client, &telegram_config, &message).await;
+                        }
+                    });
+                }
+                if error.contains("2FA") || error.contains("não-interativa") {
+                    StdExitCode::from(u8::try_from(ExitCode::TwoFactor.as_i32()).unwrap_or(1))
+                } else {
+                    StdExitCode::from(u8::try_from(ExitCode::Failure.as_i32()).unwrap_or(1))
+                }
             },
             |code| StdExitCode::from(u8::try_from(code).unwrap_or(1)),
         )
