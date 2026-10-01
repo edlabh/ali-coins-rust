@@ -122,4 +122,5 @@ jobs:
             -e ALI_USER=ci@example.com \
             -e ALI_PASSWORD=ci \
             -e ENCRYPT_LOCAL_SESSION=false \
-            ali-coins-rust:ci --dry-run --json | head -5
+            ali-coins-rust:ci --dry-run --json > /tmp/smoke.json
+          head -5 /tmp/smoke.json
