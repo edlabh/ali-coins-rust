@@ -54,7 +54,7 @@ async fn abre_pagina_aplica_device_e_avalia() {
     let text = page.query_all_text("#t").await.expect("texto");
     assert_eq!(text, vec!["ok".to_string()]);
     let screenshot = page.screenshot().await.expect("screenshot");
-    assert!(!screenshot.is_empty());
+    assert_ne!(screenshot.len(), 0);
 
     let ua: String = ali_coins_browser::cdp::eval_typed(&*page, "navigator.userAgent")
         .await

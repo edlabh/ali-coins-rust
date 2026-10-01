@@ -426,6 +426,7 @@ pub async fn execute_surprise_items(
     let mut clicked_count = 0_u32;
     let mut navigated_away = false;
     let mut last_click_stayed_on_feed = false;
+    let mut no_progress_streak = 0_u32;
 
     for i in 0..3_usize {
         let metrics = wait_for_cards(page).await;
@@ -520,6 +521,20 @@ pub async fn execute_surprise_items(
                 save_debug(page, "surprise-after-tap").await;
             }
             close_new_tabs(browser, &before_pages, &protect).await;
+            // Progresso é o `tracking` subir; sem progresso em toques seguidos,
+            // encerra para não deixar a gaveta de tarefas inacessível.
+            if tracking_after <= tracking_before {
+                no_progress_streak += 1;
+                if no_progress_streak >= 2 {
+                    ali_coins_core::logging::global().warn(
+                        "Sem progresso de tracking em toques seguidos; encerrando a tarefa surpresa para preservar a gaveta.",
+                        &[],
+                    );
+                    break;
+                }
+            } else {
+                no_progress_streak = 0;
+            }
         }
         tokio::time::sleep(Duration::from_millis(400)).await;
     }
@@ -541,6 +556,7 @@ pub async fn execute_surprise_items(
         && !final_is_detail;
     if detail_enabled
         && can_fallback
+        && no_progress_streak < 2
         && clicked_count > 0
         && !navigated_away
         && last_click_stayed_on_feed
