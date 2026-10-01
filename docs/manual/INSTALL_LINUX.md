@@ -78,21 +78,44 @@ No primeiro login o app pode pedir 2FA; em ambiente interativo o fluxo orienta, 
 `0` sucesso · `1` falha · `2` sem ação/já coletado · `3` lock ativo ·
 `4` streak quebrado · `5` 2FA não-interativo · `6` crash
 
-## 7. Docker (experimental)
+## 7. Docker
 
-> ⚠️ **Experimental — prefira o binário direto.**
-> O uso da imagem Docker ainda é experimental. Compilar dentro de um container
-> (ex.: imagem compatível `rust:bookworm`) pode levar **horas** em hosts com poucos
-> recursos (1 vCPU / ~1 GB de RAM) e o build pode ser morto por falta de memória.
-> No dia a dia, rode o binário nativo (`target/release/ali-coins` ou o `ali-coins`
-> instalado); use Docker somente se o ambiente exigir isolamento e valide antes.
+Há **dois** caminhos, para não recompilar o workspace a cada atualização:
+
+**VPS com poucos recursos (recomendado): imagem de runtime + binário pré-compilado.**
+
+1. Compile o binário uma vez (o `target/` fica incremental):
+   ```bash
+   cargo build --release -p ali-coins-cli
+   ```
+2. Gere a imagem de runtime (segundos — só copia o binário e reaproveita a
+   camada do apt):
+   ```bash
+   wrappers/build-runtime-image.sh          # vira ali-coins-rust:latest
+   ```
+3. Rode:
+   ```bash
+   docker run --rm --init --shm-size=256m --memory=768m --memory-swap=1536m \
+     -v "$PWD:/data" -w /data -v "$HOME/.cache/ms-playwright:/pw:ro" \
+     -e ALI_COINS_CHROME=/pw/chromium-1193/chrome-linux/chrome -e NO_SANDBOX=true \
+     ali-coins-rust:latest checkin --json
+   ```
+
+**Imagem completa (`Dockerfile`)**: usada pelo CI e quando se quer construir tudo
+em container. O build já aplica `CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16` e
+`CARGO_PROFILE_RELEASE_LTO=false` (o perfil do workspace usa `codegen-units = 1`
++ LTO thin, que em 1 vCPU multiplica o tempo) e usa **cache do BuildKit** para
+`registry`/`git`/`target` — a segunda build é incremental.
 
 ```bash
-docker build -t ali-coins-rust .
+DOCKER_BUILDKIT=1 docker build -t ali-coins-rust:full .
 docker run --rm --init --shm-size=256m --memory=768m --memory-swap=1536m \
   -v "$PWD:/data" -w /data \
   -e ALI_COINS_CHROME=/caminho/no/container/chrome -e NO_SANDBOX=true \
-  ali-coins-rust checkin --json
+  ali-coins-rust:full checkin --json
 ```
+
+> Em hosts com 1 vCPU/~1 GB, evite o build completo (pode levar dezenas de
+> minutos e ser morto por falta de memória). Use `Dockerfile.runtime`.
 
 > Windows/macOS ainda **não** são suportados pelo port (decisão Linux-first no roadmap).
