@@ -286,6 +286,22 @@ desktop, tanto no check-in quanto nas tarefas (como o oráculo):
   (`alreadyCollected=false`, `streakDays 3→4`) e o saldo pós-check-in foi
   sincronizado (`1128`) enquanto o extrato não refletia o crédito.
 
+## Fase 5 — hardening do CI (01/10/2026)
+
+- **Auditoria bloqueante**: `cargo audit` sem `|| true` (0 vulnerabilidades; aviso
+  de versão yanked apenas), com ferramenta pré-compilada via `taiki-e/install-action`.
+- **Cobertura**: job `coverage` com `cargo llvm-cov --workspace --summary-only` e
+  gate progressivo em **61%** — medido em 01/10: **61,74% de linhas** (14.473
+  linhas, 8.936 cobertas). Meta de 80% registrada como pendência: as maiores
+  lacunas são o glue de CLI (`run_all`/`run_checkin`/`run_tasks`, que dependem de
+  browser real) e o CDP/tarefas DOM (smoke `#[ignore]`).
+- **SBOM**: job `sbom` gera CycloneDX JSON (`cargo cyclonedx --format json`) e
+  publica `*.cdx.json` como artefato do workflow.
+- **Dependabot**: `.github/dependabot.yml` para `cargo`, `github-actions` e
+  `docker` (semanal, PRs agrupados para minor/patch).
+- **Dockerfile**: `ARG CARGO_BUILD_JOBS=1` e `CARGO_PROFILE_RELEASE_LTO=false`
+  por padrão, permitindo build da imagem na VPS de baixa memória.
+
 ## D-02 residual — sessão importada expirada (01/10/2026) — validado com fixtures
 
 Fechado o último item funcional de notificação: o `failure` de conta única passa a

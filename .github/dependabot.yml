@@ -11,6 +11,11 @@ updates:
         update-types:
           - minor
           - patch
+    ignore:
+      # Crates criptográficos/paridade: majors só com avaliação manual.
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
 
   - package-ecosystem: github-actions
     directory: "/"
