@@ -362,6 +362,21 @@ Reforços aplicados (commit `40a9ff8`):
 - Nas falhas anteriores (30/09 e 01/10), o runner encerrava a etapa após ~2 min
   de retries — agora há recuperação ativa.
 
+### Surpresa preventiva e visibilidade da fila (01/10, tarde)
+
+A execução real mostrou o ciclo: a surpresa toca itens mesmo **sem progresso** de
+`tracking`, e cada rodada derruba a gaveta (a Cupons e as demais tarefas da fila
+ficam sem execução; o oráculo marca a surpresa como "sem progresso após 3
+tentativas" e segue). Correções (commit `88b0054`):
+
+- `execute_surprise_items` **para após 2 toques seguidos sem progresso** de
+  `tracking` (antes tocava 3–4 por tentativa e o runner reexecutava);
+- o fallback de detalhe não roda quando não houve progresso;
+- o runner agora **registra a lista extraída** do painel
+  (`Painel de tarefas (N): título [botão] | ...`), permitindo auditar a fila a
+  cada leitura (ex.: confirmar se "Coupons & shopping credits for you!" estava
+  presente).
+
 ## D-02 residual — sessão importada expirada (01/10/2026) — validado com fixtures
 
 Fechado o último item funcional de notificação: o `failure` de conta única passa a
