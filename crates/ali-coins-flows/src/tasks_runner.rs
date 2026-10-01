@@ -13,8 +13,8 @@ use crate::tasks::{
 };
 use crate::tasks_dispatcher::{DispatchOptions, execute_task_action, wait_dom_content_loaded};
 use crate::tasks_verifier::{
-    MOBILE_COIN_URL_IMMERSIVE, click_task_button, ensure_coin_page, get_drawer_tasks_with_retry,
-    open_task_drawer,
+    MOBILE_COIN_URL_IMMERSIVE, MainPageState, click_task_button, ensure_coin_page,
+    get_drawer_tasks_with_retry, open_task_drawer,
 };
 use ali_coins_browser::driver::{Browser, Page};
 use std::collections::{HashMap, HashSet};
@@ -178,7 +178,9 @@ async fn close_orphan_pages(browser: &dyn Browser, main_url: &str) {
         let Some(url) = bounded(2000, page.url()).await else {
             continue;
         };
-        if url.is_empty() || url == main_url {
+        if url.is_empty() || url == main_url || url.contains("coin-index") {
+            // Protege a central de moedas: o matching por URL não distingue a
+            // página principal de eventuais abas irmãs.
             continue;
         }
         let _ = bounded(3000, page.close()).await;
@@ -243,7 +245,11 @@ pub async fn run_tasks(
     browser: &dyn Browser,
     options: &TasksOptions,
 ) -> Result<TasksRun, TasksError> {
-    ensure_coin_page(page, options.nav_timeout).await?;
+    // A página ativa começa emprestada e pode ser substituída quando o site/a
+    // tarefa fecha a original (`ensureMainPage` do oráculo).
+    let initial_page: &dyn Page = page;
+    let mut owned_page: Option<Box<dyn Page>> = None;
+    ensure_coin_page(initial_page, options.nav_timeout).await?;
     let _ = crate::navigation::close_modals(page).await;
     if !open_task_drawer(page, options.open_drawer_timeout).await {
         return Err(TasksError::DrawerMissing);
@@ -324,7 +330,9 @@ pub async fn run_tasks(
         }
 
         while actions < options.max_actions {
-            let tasks = match get_drawer_tasks_with_retry(
+            let page: &dyn Page = owned_page.as_deref().unwrap_or(initial_page);
+            let (tasks, page_state) = match get_drawer_tasks_with_retry(
+                browser,
                 page,
                 options.nav_timeout_short,
                 Duration::from_secs(20),
@@ -332,7 +340,7 @@ pub async fn run_tasks(
             )
             .await
             {
-                Ok(tasks) => tasks,
+                Ok(result) => result,
                 Err(error) => {
                     ali_coins_core::logging::global().error(
                         &format!(
@@ -343,6 +351,10 @@ pub async fn run_tasks(
                     break;
                 }
             };
+            if let MainPageState::Recreated(recreated) = page_state {
+                owned_page = Some(recreated);
+            }
+            let page: &dyn Page = owned_page.as_deref().unwrap_or(initial_page);
             last_tasks.clone_from(&tasks);
 
             if tasks.is_empty() {
@@ -644,10 +656,17 @@ pub async fn run_tasks(
     }
 
     // Relatório final (com retry de extração, como o oráculo).
-    let final_tasks =
-        get_drawer_tasks_with_retry(page, options.nav_timeout_short, Duration::from_secs(20), 2)
-            .await
-            .unwrap_or_default();
+    let page: &dyn Page = owned_page.as_deref().unwrap_or(initial_page);
+    let final_tasks = get_drawer_tasks_with_retry(
+        browser,
+        page,
+        options.nav_timeout_short,
+        Duration::from_secs(20),
+        2,
+    )
+    .await
+    .map(|(tasks, _)| tasks)
+    .unwrap_or_default();
 
     let mut results: Vec<TaskOutcome> = final_tasks
         .iter()

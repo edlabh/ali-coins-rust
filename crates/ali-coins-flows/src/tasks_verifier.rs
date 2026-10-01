@@ -3,7 +3,7 @@
 
 use crate::navigation::close_modals;
 use crate::tasks::{TaskItem, TasksError, parse_task_item};
-use ali_coins_browser::driver::Page;
+use ali_coins_browser::driver::{Browser, Page};
 use std::time::{Duration, Instant};
 
 /// URL da central de moedas mobile (painel de tarefas).
@@ -437,39 +437,203 @@ pub async fn ensure_coin_page(page: &dyn Page, nav_timeout: Duration) -> Result<
     Ok(())
 }
 
+/// Estado da página principal após `ensure_main_page`.
+pub enum MainPageState {
+    /// A página original continua válida.
+    Keep,
+    /// A página original fechou e foi recriada (mobile, com device profile).
+    Recreated(Box<dyn Page>),
+}
+
+/// Garante a página principal antes de abrir a gaveta (port de `ensureMainPage`):
+/// recria a página quando ela está fechada e navega para a central mobile quando
+/// a URL não é a dela. Nunca falha: devolve a melhor página disponível.
+pub async fn ensure_main_page(
+    browser: &dyn Browser,
+    page: &dyn Page,
+    nav_timeout_short: Duration,
+) -> MainPageState {
+    match page.url().await {
+        Err(_) => {
+            ali_coins_core::logging::global().warn(
+                "Página principal fechada ou indisponível. Recriando página principal...",
+                &[],
+            );
+            let Ok(fresh) = browser.new_page().await else {
+                return MainPageState::Keep;
+            };
+            let profile = ali_coins_browser::launch::pixel7_profile();
+            let _ = fresh.set_device_profile(&profile).await;
+            let _ = crate::navigation::goto_with_retry_timeout(
+                fresh.as_ref(),
+                MOBILE_COIN_URL_IMMERSIVE,
+                3,
+                2_000,
+                nav_timeout_short,
+            )
+            .await;
+            MainPageState::Recreated(fresh)
+        }
+        Ok(url) => {
+            if !url.contains("coin-index/index.html") {
+                let _ = crate::navigation::goto_with_retry_timeout(
+                    page,
+                    MOBILE_COIN_URL_IMMERSIVE,
+                    3,
+                    2_000,
+                    nav_timeout_short,
+                )
+                .await;
+            }
+            MainPageState::Keep
+        }
+    }
+}
+
 /// Abre a gaveta e extrai com retentativas (port de `getDrawerTasksWithRetry`).
+/// Devolve as tarefas e a página ativa (recriada quando a original fechou).
 pub async fn get_drawer_tasks_with_retry(
+    browser: &dyn Browser,
     page: &dyn Page,
     nav_timeout_short: Duration,
     opener_timeout: Duration,
     max_retries: u32,
-) -> Result<Vec<TaskItem>, TasksError> {
-    for attempt in 1..=max_retries + 1 {
-        let _ = ensure_coin_page(page, nav_timeout_short).await;
-        if !open_task_drawer(page, opener_timeout).await {
+) -> Result<(Vec<TaskItem>, MainPageState), TasksError> {
+    let mut state = MainPageState::Keep;
+    let last_attempt = max_retries + 1;
+    for attempt in 1..=last_attempt {
+        let current: &dyn Page = match &state {
+            MainPageState::Keep => page,
+            MainPageState::Recreated(recreated) => recreated.as_ref(),
+        };
+        if let MainPageState::Recreated(recreated) =
+            ensure_main_page(browser, current, nav_timeout_short).await
+        {
+            state = MainPageState::Recreated(recreated);
+        }
+        let active: &dyn Page = match &state {
+            MainPageState::Keep => page,
+            MainPageState::Recreated(recreated) => recreated.as_ref(),
+        };
+        if !open_task_drawer(active, opener_timeout).await {
             ali_coins_core::logging::global().warn(
                 &format!(
-                    "Tentativa {attempt}/{}: painel de tarefas fechado ou não detectado.",
-                    max_retries + 1
+                    "Tentativa {attempt}/{last_attempt}: painel de tarefas fechado ou não detectado."
                 ),
                 &[],
             );
+            if attempt == last_attempt {
+                log_drawer_failure_diagnostics(active).await;
+            }
             tokio::time::sleep(Duration::from_millis(1000)).await;
             continue;
         }
-        match extract_tasks_from_drawer(page).await {
-            Ok(tasks) => return Ok(tasks),
+        match extract_tasks_from_drawer(active).await {
+            Ok(tasks) => return Ok((tasks, state)),
             Err(error) => {
                 ali_coins_core::logging::global().warn(
                     &format!(
-                        "Tentativa {attempt}/{}: falha na leitura dos elementos de tarefas: {error}",
-                        max_retries + 1
+                        "Tentativa {attempt}/{last_attempt}: falha na leitura dos elementos de tarefas: {error}"
                     ),
                     &[],
                 );
+                if attempt == last_attempt {
+                    log_drawer_failure_diagnostics(active).await;
+                }
                 tokio::time::sleep(Duration::from_millis(1000)).await;
             }
         }
     }
     Err(TasksError::DrawerMissing)
+}
+
+/// Diagnóstico best-effort quando a gaveta não abre: URL, título, trecho do
+/// corpo e screenshot `0600` em `scratch/` (facilita explicar falhas do site).
+async fn log_drawer_failure_diagnostics(page: &dyn Page) {
+    let url = page.url().await.unwrap_or_default();
+    let title = page.title().await.unwrap_or_default();
+    let snippet = page
+        .eval_raw(
+            "(document.body && document.body.innerText ? document.body.innerText.slice(0, 300) : '')",
+        )
+        .await
+        .ok()
+        .and_then(|value| value.as_str().map(str::to_string))
+        .unwrap_or_default();
+    ali_coins_core::logging::global().error(
+        &format!(
+            "Diagnóstico da gaveta indisponível: url={url} título={title:?} corpo={snippet:?}"
+        ),
+        &[],
+    );
+    if let Ok(png) = page.screenshot().await {
+        let dir = std::path::PathBuf::from("scratch");
+        if ali_coins_browser::diagnostics::prepare_output_dir(&dir).is_ok() {
+            let ts = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |duration| {
+                    i64::try_from(duration.as_millis()).unwrap_or(i64::MAX)
+                });
+            let path = dir.join(format!("tasks-drawer-falha-{ts}.png"));
+            if ali_coins_core::secure_fs::safe_write_file(&path, &png).is_ok() {
+                ali_coins_core::logging::global().warn(
+                    &format!("Screenshot do diagnóstico salvo em {}", path.display()),
+                    &[],
+                );
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ali_coins_browser::driver::{BrowserDriver as _, LaunchOptions};
+    use ali_coins_browser::mock::{MockDriver, MockPageSpec};
+
+    #[tokio::test]
+    async fn pagina_fechada_e_recriada_na_central_mobile() {
+        let driver = MockDriver::new(vec![MockPageSpec::default(), MockPageSpec::default()]);
+        let browser = driver
+            .launch(&LaunchOptions::default())
+            .await
+            .expect("launch");
+        let page = browser.new_page().await.expect("página");
+        page.close().await.expect("fechar");
+
+        match ensure_main_page(&*browser, &*page, Duration::from_secs(1)).await {
+            MainPageState::Recreated(nova) => {
+                assert_eq!(
+                    nova.url().await.expect("url"),
+                    MOBILE_COIN_URL_IMMERSIVE,
+                    "página recriada deve navegar para a central mobile"
+                );
+            }
+            MainPageState::Keep => panic!("deveria recriar a página fechada"),
+        }
+    }
+
+    #[tokio::test]
+    async fn pagina_viva_com_url_errada_e_navegada_sem_recriar() {
+        let driver = MockDriver::new(vec![MockPageSpec {
+            url: "https://example.com/outra".to_string(),
+            ..MockPageSpec::default()
+        }]);
+        let browser = driver
+            .launch(&LaunchOptions::default())
+            .await
+            .expect("launch");
+        let page = browser.new_page().await.expect("página");
+
+        match ensure_main_page(&*browser, &*page, Duration::from_secs(1)).await {
+            MainPageState::Keep => {
+                assert_eq!(
+                    page.url().await.expect("url"),
+                    MOBILE_COIN_URL_IMMERSIVE,
+                    "página viva deve ser navegada para a central mobile"
+                );
+            }
+            MainPageState::Recreated(_) => panic!("não deveria recriar página viva"),
+        }
+    }
 }
