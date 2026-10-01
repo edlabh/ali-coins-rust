@@ -302,6 +302,31 @@ desktop, tanto no check-in quanto nas tarefas (como o oráculo):
 - **Dockerfile**: `ARG CARGO_BUILD_JOBS=1` e `CARGO_PROFILE_RELEASE_LTO=false`
   por padrão, permitindo build da imagem na VPS de baixa memória.
 
+## Recuperação da página principal nas tarefas (01/10/2026)
+
+A execução do cron de 01/10 mostrou a gaveta de tarefas inacessível **após** a
+tarefa "Browse surprise items" (o site não registrou os toques — D-10), com
+"painel de tarefas fechado ou não detectado" até encerrar a etapa. As tarefas
+executadas antes (check-in +1, sponsored +5+5) concluíram; o relatório ficou só
+com as 3 tarefas app-only desativadas porque a extração final da gaveta falhou
+(mesma lógica do oráculo nesse cenário).
+
+Correções aplicadas:
+
+- **`ensure_main_page`** (port fiel de `ensureMainPage`): recria a página
+  principal quando ela está **fechada** (com device profile Pixel 7 e navegação
+  para a central mobile) e navega para a central quando a URL não é dela.
+- **`get_drawer_tasks_with_retry` devolve a página ativa**; o runner passa a
+  substituir o handle quando a original fecha (antes o retry repetia no mesmo
+  estado, sem recuperação).
+- **Diagnóstico em falha da gaveta**: URL, título, trecho do corpo e screenshot
+  `0600` em `scratch/` — explica a causa na próxima ocorrência.
+- **Proteção extra**: `close_new_tabs`/`close_orphan_pages` nunca fecham páginas
+  da central de moedas (o matching por URL podia fechar a página principal).
+- **Testes**: 2 novos no crate de flows (página fechada recriada na central;
+  página viva com URL errada navegada sem recriar) — 47 testes no crate,
+  workspace e clippy verdes.
+
 ## D-02 residual — sessão importada expirada (01/10/2026) — validado com fixtures
 
 Fechado o último item funcional de notificação: o `failure` de conta única passa a

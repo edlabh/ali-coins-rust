@@ -333,7 +333,13 @@ async fn close_new_tabs(browser: Option<&dyn Browser>, before: &[String], protec
         let Some(url) = with_timeout(2000, page.url()).await else {
             continue;
         };
-        if url.is_empty() || url == protect_url || before.contains(&url) {
+        if url.is_empty()
+            || url == protect_url
+            || before.contains(&url)
+            // Nunca fechar a central de moedas: pode ser a própria página
+            // principal (o matching por URL não distingue abas irmãs).
+            || url.contains("coin-index")
+        {
             continue;
         }
         let _ = with_timeout(3000, page.close()).await;
