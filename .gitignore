@@ -35,3 +35,8 @@ scratch/
 # SBOM (gerado pelo CI)
 *.cdx.json
 bom.json
+
+# Backups locais de sessão/credenciais (nunca versionar)
+*.local-bak-*
+*.oracle-bak
+*.bak-*
