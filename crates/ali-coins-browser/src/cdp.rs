@@ -410,6 +410,12 @@ impl Page for CdpPageHandle {
         y: f64,
         modifiers: i64,
     ) -> Result<(), BrowserError> {
+        // O Playwright move o mouse antes do clique (hover); alguns handlers do
+        // site só reagem ao clique após o `mousemove`.
+        let mut moved = DispatchMouseEventParams::new(DispatchMouseEventType::MouseMoved, x, y);
+        moved.buttons = Some(0);
+        bounded_cdp("mover mouse", self.page.execute(moved)).await?;
+        tokio::time::sleep(std::time::Duration::from_millis(30)).await;
         let mut press = DispatchMouseEventParams::new(DispatchMouseEventType::MousePressed, x, y);
         press.button = Some(MouseButton::Left);
         press.buttons = Some(1);
@@ -572,13 +578,24 @@ pub async fn apply_device_profile(
         .await
         .map_err(|err| BrowserError::Launch(err.to_string()))?;
     if profile.has_touch {
-        // Playwright converte input de mouse em toque em contextos mobile — sem
-        // isso os handlers de "tap" do site não disparam com cliques reais.
-        let mut emit = SetEmitTouchEventsForMouseParams::new(true);
-        emit.configuration = Some(SetEmitTouchEventsForMouseConfiguration::Mobile);
-        page.execute(emit)
-            .await
-            .map_err(|err| BrowserError::Launch(err.to_string()))?;
+        // Conversão de mouse→toque (device mode) **desligada por padrão**: o
+        // Playwright emite mouse em `click()` (gaveta de tarefas, cards da
+        // surpresa) e toque apenas em `tap()`. Com a conversão ligada, o site
+        // ignora os cliques/toques (gaveta não abre e `tracking` não sobe).
+        // Mantida atrás de `PW_EMIT_TOUCH=1` para depuração/compatibilidade.
+        let emit_touch = std::env::var("PW_EMIT_TOUCH").is_ok_and(|value| {
+            matches!(
+                value.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "on" | "yes"
+            )
+        });
+        if emit_touch {
+            let mut emit = SetEmitTouchEventsForMouseParams::new(true);
+            emit.configuration = Some(SetEmitTouchEventsForMouseConfiguration::Mobile);
+            page.execute(emit)
+                .await
+                .map_err(|err| BrowserError::Launch(err.to_string()))?;
+        }
     }
 
     page.set_user_agent(profile.user_agent.as_str())

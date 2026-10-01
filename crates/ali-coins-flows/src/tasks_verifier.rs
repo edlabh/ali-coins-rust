@@ -92,37 +92,37 @@ pub async fn open_task_drawer(page: &dyn Page, timeout: Duration) -> bool {
             &[],
         );
 
-        let mut clicked = click_open_button(page).await;
-        if !clicked {
-            clicked = click_open_by_text(page).await;
-        }
+        // 1) Clique via JS nos melhores candidatos (botão real primeiro).
         let mut opened = false;
-        if clicked {
+        if click_open_button(page).await {
             opened = page
                 .wait_for_selector(selectors::TASK_ITEM, Duration::from_secs(6))
                 .await
                 .is_ok()
                 || drawer_is_open(page).await;
         }
+        // 2) Clique real de mouse (gesto confiável, como o Playwright) com
+        //    verificação de posição (`elementFromPoint`) em cada candidato.
         if !opened {
-            // O oráculo clica com o mouse real (`taskBtn.click()`); o clique via
-            // JS pode ser ignorado por handlers que exigem input confiável.
-            if let Some((x, y)) = open_button_center(page).await {
-                if page.click_at(x, y).await.is_ok() {
-                    opened = page
-                        .wait_for_selector(selectors::TASK_ITEM, Duration::from_secs(6))
-                        .await
-                        .is_ok()
-                        || drawer_is_open(page).await;
+            for (x, y) in open_button_candidates(page).await {
+                if page.click_at(x, y).await.is_err() {
+                    continue;
+                }
+                if page
+                    .wait_for_selector(selectors::TASK_ITEM, Duration::from_secs(4))
+                    .await
+                    .is_ok()
+                    || drawer_is_open(page).await
+                {
+                    opened = true;
+                    break;
                 }
             }
         }
         if opened {
             return true;
         }
-        if !clicked {
-            let _ = page.eval_raw("window.scrollBy(0, 150); true").await;
-        }
+        let _ = page.eval_raw("window.scrollBy(0, 150); true").await;
 
         if Instant::now() >= deadline {
             break;
@@ -132,31 +132,79 @@ pub async fn open_task_drawer(page: &dyn Page, timeout: Duration) -> bool {
     false
 }
 
-/// Centro (x, y) do botão de abrir a gaveta, com `scrollIntoView` antes de medir.
-async fn open_button_center(page: &dyn Page) -> Option<(f64, f64)> {
+/// Candidatos de abertura ordenados (botão real primeiro, menor área depois),
+/// com scroll para o centro e verificação de posição (`elementFromPoint`).
+async fn open_button_candidates(page: &dyn Page) -> Vec<(f64, f64)> {
     let script = r#"(() => {
       const sels = [
         'button.aecoin-taskButton-3V41b', '[class*="taskButton"]',
         'button[class*="aecoin-signButton"]', '.aecoin-signButtonWrapper-3p3NS button',
         '[class*="signButtonWrapper"] button', 'div[class*="aecoin-signButton"]'
       ];
+      const cands = [];
       for (const sel of sels) {
-        const el = document.querySelector(sel);
-        if (!el) continue;
-        el.scrollIntoView({ block: 'center' });
-        const r = el.getBoundingClientRect();
-        if (r.width <= 0 || r.height <= 0) continue;
-        return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+        for (const node of document.querySelectorAll(sel)) {
+          const r = node.getBoundingClientRect();
+          if (r.width <= 0 || r.height <= 0 || node.offsetParent === null) continue;
+          cands.push({ node, area: r.width * r.height, isButton: node.tagName === 'BUTTON' });
+        }
       }
-      return null;
+      const needles = ['earn more coins', 'ganhe mais moedas'];
+      for (const node of document.querySelectorAll('button, [role="button"], div')) {
+        const text = (node.textContent || '').trim().toLowerCase();
+        if (!needles.some((n) => text.includes(n))) continue;
+        const r = node.getBoundingClientRect();
+        if (r.width <= 0 || r.height <= 0 || node.offsetParent === null) continue;
+        cands.push({ node, area: r.width * r.height, isButton: node.tagName === 'BUTTON' });
+      }
+      cands.sort((a, b) => (a.isButton === b.isButton ? 0 : a.isButton ? -1 : 1) || a.area - b.area);
+      const out = [];
+      for (const c of cands.slice(0, 8)) {
+        c.node.scrollIntoView({ block: 'center' });
+        const r = c.node.getBoundingClientRect();
+        if (r.width <= 0 || r.height <= 0) continue;
+        const x = r.left + r.width / 2;
+        const y = r.top + r.height / 2;
+        const top = document.elementFromPoint(x, y);
+        const ok = Boolean(top && (c.node === top || c.node.contains(top)));
+        out.push({ x, y, ok, top: top ? String(top.className || top.tagName || '').slice(0, 60) : '' });
+      }
+      return out;
     })()"#;
-    let value = page.eval_raw(script).await.ok()?;
-    let x = value.get("x").and_then(serde_json::Value::as_f64)?;
-    let y = value.get("y").and_then(serde_json::Value::as_f64)?;
-    Some((x, y))
+    let Ok(value) = page.eval_raw(script).await else {
+        return Vec::new();
+    };
+    let items = value.as_array().cloned().unwrap_or_default();
+    let mut out = Vec::new();
+    for item in &items {
+        let x = item.get("x").and_then(serde_json::Value::as_f64);
+        let y = item.get("y").and_then(serde_json::Value::as_f64);
+        let ok = item
+            .get("ok")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false);
+        let top = item
+            .get("top")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("");
+        if let (Some(x), Some(y)) = (x, y) {
+            ali_coins_core::logging::global().info(
+                &format!(
+                    "Candidato de abertura: ({x:.0},{y:.0}) coberto={} topo={top:?}",
+                    !ok
+                ),
+                &[],
+            );
+            if ok {
+                out.push((x, y));
+            }
+        }
+    }
+    out
 }
 
-/// Clique no primeiro seletor de abertura visível.
+/// Clique via JS nos melhores candidatos (botão real primeiro; inclui o
+/// fallback semântico por texto para versões novas do site).
 async fn click_open_button(page: &dyn Page) -> bool {
     let script = r#"(() => {
       const sels = [
@@ -164,37 +212,26 @@ async fn click_open_button(page: &dyn Page) -> bool {
         'button[class*="aecoin-signButton"]', '.aecoin-signButtonWrapper-3p3NS button',
         '[class*="signButtonWrapper"] button', 'div[class*="aecoin-signButton"]'
       ];
+      const cands = [];
       for (const sel of sels) {
-        const el = document.querySelector(sel);
-        if (!el) continue;
-        const r = el.getBoundingClientRect();
-        if (r.width <= 0 || r.height <= 0) continue;
-        el.click();
-        return true;
+        for (const node of document.querySelectorAll(sel)) {
+          const r = node.getBoundingClientRect();
+          if (r.width <= 0 || r.height <= 0 || node.offsetParent === null) continue;
+          cands.push({ node, area: r.width * r.height, isButton: node.tagName === 'BUTTON' });
+        }
       }
-      return false;
-    })()"#;
-    page.eval_raw(script)
-        .await
-        .ok()
-        .and_then(|value| value.as_bool())
-        .unwrap_or(false)
-}
-
-/// Fallback semântico: botão com texto "Ganhe mais moedas"/"Earn more coins".
-async fn click_open_by_text(page: &dyn Page) -> bool {
-    let script = r#"(() => {
       const needles = ['earn more coins', 'ganhe mais moedas'];
-      const nodes = document.querySelectorAll('button, [role="button"], div');
-      for (const el of nodes) {
-        const text = (el.textContent || '').trim().toLowerCase();
+      for (const node of document.querySelectorAll('button, [role="button"], div')) {
+        const text = (node.textContent || '').trim().toLowerCase();
         if (!needles.some((n) => text.includes(n))) continue;
-        const r = el.getBoundingClientRect();
-        if (r.width <= 0 || r.height <= 0 || el.offsetParent === null) continue;
-        el.click();
-        return true;
+        const r = node.getBoundingClientRect();
+        if (r.width <= 0 || r.height <= 0 || node.offsetParent === null) continue;
+        cands.push({ node, area: r.width * r.height, isButton: node.tagName === 'BUTTON' });
       }
-      return false;
+      cands.sort((a, b) => (a.isButton === b.isButton ? 0 : a.isButton ? -1 : 1) || a.area - b.area);
+      if (!cands.length) return false;
+      cands[0].node.click();
+      return true;
     })()"#;
     page.eval_raw(script)
         .await
@@ -203,7 +240,6 @@ async fn click_open_by_text(page: &dyn Page) -> bool {
         .unwrap_or(false)
 }
 
-/// Extrai as tarefas da gaveta (mesmo script de `extractTasksFromDrawer`).
 pub async fn extract_tasks_from_drawer(page: &dyn Page) -> Result<Vec<TaskItem>, TasksError> {
     let script = r"(() => {
       const els = Array.from(document.querySelectorAll('.e2e_normal_task'));
@@ -598,7 +634,7 @@ pub async fn get_drawer_tasks_with_retry(
 
 /// Diagnóstico best-effort quando a gaveta não abre: URL, título, trecho do
 /// corpo e screenshot `0600` em `scratch/` (facilita explicar falhas do site).
-async fn log_drawer_failure_diagnostics(page: &dyn Page) {
+pub(crate) async fn log_drawer_failure_diagnostics(page: &dyn Page) {
     let url = page.url().await.unwrap_or_default();
     let title = page.title().await.unwrap_or_default();
     let snippet = page
@@ -609,10 +645,26 @@ async fn log_drawer_failure_diagnostics(page: &dyn Page) {
         .ok()
         .and_then(|value| value.as_str().map(str::to_string))
         .unwrap_or_default();
+    let probe = page
+        .eval_raw(
+            r#"(() => {
+              const iframes = Array.from(document.querySelectorAll('iframe'))
+                .map((f) => (f.src || '').slice(0, 120));
+              const buttons = Array.from(document.querySelectorAll('button'))
+                .slice(0, 12)
+                .map((b) => ({ t: (b.textContent || '').trim().slice(0, 40), c: String(b.className || '').slice(0, 60) }));
+              const taskish = Array.from(document.querySelectorAll('[class*="task"], [class*="signButton"], .e2e_task'))
+                .slice(0, 8)
+                .map((e) => String(e.className || '').slice(0, 60));
+              return { iframes, buttons, taskish };
+            })()"#,
+        )
+        .await
+        .ok()
+        .map(|value| value.to_string())
+        .unwrap_or_default();
     ali_coins_core::logging::global().error(
-        &format!(
-            "Diagnóstico da gaveta indisponível: url={url} título={title:?} corpo={snippet:?}"
-        ),
+        &format!("Diagnóstico da gaveta indisponível: url={url} título={title:?} corpo={snippet:?} sondas={probe}"),
         &[],
     );
     if let Ok(png) = page.screenshot().await {
