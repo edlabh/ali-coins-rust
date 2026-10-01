@@ -13,9 +13,10 @@
 #
 # O cache do BuildKit mantém registry/git/target entre builds: quando só o
 # código muda, o cargo recompila apenas o que mudou (builds incrementais).
-# Toolchain pinada (mesma do rust-toolchain.toml) para não invalidar o cache
-# do cargo quando o `stable` é atualizado dentro do container.
-FROM rust:1.99-bookworm AS builder
+# Toolchain pinada em `rust-toolchain.toml` (1.99.0). Usamos a tag `bookworm`
+# (e não `1.99-bookworm`) porque a tag versionada pode não existir no registry;
+# o rustup instala a versão exata pinada dentro do build.
+FROM rust:bookworm AS builder
 ARG CARGO_BUILD_JOBS=1
 ARG CARGO_PROFILE_RELEASE_LTO=false
 ARG CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16
