@@ -13,7 +13,7 @@
 #
 # O cache do BuildKit mantém registry/git/target entre builds: quando só o
 # código muda, o cargo recompila apenas o que mudou (builds incrementais).
-FROM rust:1.85-bookworm AS builder
+FROM rust:1.98-bookworm AS builder
 ARG CARGO_BUILD_JOBS=1
 ARG CARGO_PROFILE_RELEASE_LTO=false
 ARG CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16
