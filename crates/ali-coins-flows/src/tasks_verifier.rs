@@ -96,18 +96,31 @@ pub async fn open_task_drawer(page: &dyn Page, timeout: Duration) -> bool {
         if !clicked {
             clicked = click_open_by_text(page).await;
         }
+        let mut opened = false;
         if clicked {
-            if page
+            opened = page
                 .wait_for_selector(selectors::TASK_ITEM, Duration::from_secs(6))
                 .await
                 .is_ok()
-            {
-                return true;
+                || drawer_is_open(page).await;
+        }
+        if !opened {
+            // O oráculo clica com o mouse real (`taskBtn.click()`); o clique via
+            // JS pode ser ignorado por handlers que exigem input confiável.
+            if let Some((x, y)) = open_button_center(page).await {
+                if page.click_at(x, y).await.is_ok() {
+                    opened = page
+                        .wait_for_selector(selectors::TASK_ITEM, Duration::from_secs(6))
+                        .await
+                        .is_ok()
+                        || drawer_is_open(page).await;
+                }
             }
-            if drawer_is_open(page).await {
-                return true;
-            }
-        } else {
+        }
+        if opened {
+            return true;
+        }
+        if !clicked {
             let _ = page.eval_raw("window.scrollBy(0, 150); true").await;
         }
 
@@ -117,6 +130,30 @@ pub async fn open_task_drawer(page: &dyn Page, timeout: Duration) -> bool {
         tokio::time::sleep(Duration::from_millis(1500)).await;
     }
     false
+}
+
+/// Centro (x, y) do botão de abrir a gaveta, com `scrollIntoView` antes de medir.
+async fn open_button_center(page: &dyn Page) -> Option<(f64, f64)> {
+    let script = r#"(() => {
+      const sels = [
+        'button.aecoin-taskButton-3V41b', '[class*="taskButton"]',
+        'button[class*="aecoin-signButton"]', '.aecoin-signButtonWrapper-3p3NS button',
+        '[class*="signButtonWrapper"] button', 'div[class*="aecoin-signButton"]'
+      ];
+      for (const sel of sels) {
+        const el = document.querySelector(sel);
+        if (!el) continue;
+        el.scrollIntoView({ block: 'center' });
+        const r = el.getBoundingClientRect();
+        if (r.width <= 0 || r.height <= 0) continue;
+        return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+      }
+      return null;
+    })()"#;
+    let value = page.eval_raw(script).await.ok()?;
+    let x = value.get("x").and_then(serde_json::Value::as_f64)?;
+    let y = value.get("y").and_then(serde_json::Value::as_f64)?;
+    Some((x, y))
 }
 
 /// Clique no primeiro seletor de abertura visível.
@@ -501,6 +538,7 @@ pub async fn get_drawer_tasks_with_retry(
 ) -> Result<(Vec<TaskItem>, MainPageState), TasksError> {
     let mut state = MainPageState::Keep;
     let last_attempt = max_retries + 1;
+    let mut reset_done = false;
     for attempt in 1..=last_attempt {
         let current: &dyn Page = match &state {
             MainPageState::Keep => page,
@@ -522,6 +560,17 @@ pub async fn get_drawer_tasks_with_retry(
                 ),
                 &[],
             );
+            if !reset_done && attempt < last_attempt {
+                // Estado do site pode impedir a gaveta de abrir (ex.: após a
+                // tarefa surpresa); recarrega a central uma vez para resetar.
+                reset_done = true;
+                ali_coins_core::logging::global().warn(
+                    "Gaveta inacessível; recarregando a central de moedas para resetar o estado...",
+                    &[],
+                );
+                let _ = active.eval_raw("location.reload()").await;
+                tokio::time::sleep(Duration::from_millis(3000)).await;
+            }
             if attempt == last_attempt {
                 log_drawer_failure_diagnostics(active).await;
             }
