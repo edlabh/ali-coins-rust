@@ -37,15 +37,21 @@ ssh ubuntu@136.248.83.112 \
 | Binário na VM | — | atualizado 2026-09-30 19:26 UTC (multi-conta/trace opt-in; cron usa o fluxo de conta única) |
 | Pendências do dia | — | `run_all.sh` agora grava `[run_all.sh] exit=N fim: ...` no `cron.log` |
 
-> Observação: os valores de saldo do Node (3217) e do Rust (1118) são de
-> execuções/hosts diferentes neste dia de incidente; a comparação válida começa
+> **Nota importante (01/10):** os dois crons usam **contas diferentes** — o Node
+> roda `ag***@gmail.com` e o Rust roda `edelanoali@gmail.com`. Cada sistema
+> coleta o **próprio** check-in diário (o Rust não encontra "já coletado" do
+> Node). A comparação da janela é de **comportamento/estabilidade/paridade
+> funcional**, não de saldo entre contas.
+>
+> Observação do dia de incidente (30/09): os valores de saldo do Node (3217) e
+> do Rust (1118) são de execuções/hosts diferentes; a comparação válida começa
 > em 2026-10-01, com os dois crons regulares.
 
 ## Planilha de acompanhamento
 
 | Data | Node exit | Node saldo | Rust exit | Rust saldo | Check-in (Node/Rust) | Tarefas (Node/Rust) | Divergências |
 |---|---|---|---|---|---|---|---|
-| 2026-10-01 | | | | | | | |
+| 2026-10-01 | 0 (12m23s) | 3321 (+91: check-in +40 / tarefas +51) | 0 (12m22s) | 1130 (+12: check-in +1 / tarefas +11) | Node: coletou próprio; Rust: `alreadyCollected=false` (coletou próprio) | Node: `Daily check-in +1`; Rust: 3 tarefas app-only desativadas, +11 | Nenhuma; ambos `exit=0`, sem travas |
 | 2026-10-02 | | | | | | | |
 | 2026-10-03 | | | | | | | |
 | 2026-10-04 | | | | | | | |
