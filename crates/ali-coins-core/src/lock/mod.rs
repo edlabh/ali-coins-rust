@@ -680,7 +680,10 @@ fn refresh_once(path: &Path, lock_id: &str, pid: u32) {
     }
 
     // Renovação por mtime (atômica, sem reescrever o conteúdo).
-    let mtime_ok = std::fs::File::open(path)
+    // No Windows, `set_modified` exige um handle com acesso de escrita.
+    let mtime_ok = std::fs::OpenOptions::new()
+        .write(true)
+        .open(path)
         .and_then(|file| file.set_modified(SystemTime::now()))
         .is_ok();
     if mtime_ok {
@@ -835,9 +838,20 @@ mod tests {
         options.stale_timeout_ms = Some(300); // refresh a cada 100ms
         let guard = acquire(&options).expect("adquiriu");
         std::thread::sleep(std::time::Duration::from_millis(450));
-        let mtime = metadata_mtime_ms(guard.path()).unwrap();
-        let age = Utc::now().timestamp_millis() - mtime;
-        assert!(age < 300, "mtime não foi renovado (idade={age}ms)");
+        // Tolera atraso do refresh (o fallback por claim tem janelas curtas
+        // em que o arquivo pode estar momentaneamente ausente no Windows).
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+        let mut last_age = i64::MAX;
+        while std::time::Instant::now() < deadline {
+            if let Some(mtime) = metadata_mtime_ms(guard.path()) {
+                last_age = Utc::now().timestamp_millis() - mtime;
+                if last_age < 300 {
+                    return;
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        panic!("mtime não foi renovado (idade={last_age}ms)");
     }
 
     #[test]
