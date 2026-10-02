@@ -13,7 +13,9 @@ Para Linux/VPS, veja [INSTALL_LINUX.md](INSTALL_LINUX.md); para sessões e nuvem
 5. [Primeira execução](#5-primeira-execução)
 6. [Agendamento automático diário no macOS](#6-agendamento-automático-diário-no-macos)
 7. [Resolução de problemas frequentes no macOS](#7-resolução-de-problemas-frequentes-no-macos)
-8. [Referências cruzadas](#8-referências-cruzadas)
+8. [Variáveis de ambiente (opcional)](#8-variáveis-de-ambiente-opcional)
+9. [Atualização e desinstalação](#9-atualização-e-desinstalação)
+10. [Referências cruzadas](#10-referências-cruzadas)
 
 ## 1. Requisitos mínimos
 
@@ -178,7 +180,43 @@ xattr -d com.apple.quarantine ./ali-coins        # após baixar o binário
 - se instalou via Playwright, confira o cache em `~/Library/Caches/ms-playwright`;
 - não é preciso instalar libs do sistema (o app é assinado pela Playwright).
 
-## 8. Referências Cruzadas
+## 8. Variáveis de Ambiente (opcional)
+
+O port lê tudo do `credentials.env`; variáveis do shell vencem quando definidas.
+
+```bash
+export ALI_COINS_CHROME="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+export CHROMIUM_LOW_MEMORY=false
+```
+
+Para persistir no `zsh` (padrão do macOS), adicione os `export` em `~/.zshrc`.
+
+## 9. Atualização e Desinstalação
+
+### Atualizar
+
+1. Baixe o novo tarball (mesma plataforma) e valide o `.sha256`;
+2. substitua o binário:
+   ```bash
+   install -m 755 ali-coins ~/.local/bin/ali-coins
+   ```
+3. Se usar launchd, **nada muda** (o plist aponta para o wrapper, não para uma
+   versão fixa do binário).
+
+### Desinstalar
+
+```bash
+launchctl unload ~/Library/LaunchAgents/com.ali-coins.rust.plist 2>/dev/null
+rm -f ~/Library/LaunchAgents/com.ali-coins.rust.plist
+rm -f ~/.local/bin/ali-coins
+rm -rf ~/ali-coins-rust                  # sessão/segredos: apague com cuidado
+rm -rf ~/Library/Caches/ms-playwright    # opcional (Chromium do Playwright)
+```
+
+> A sessão (`session.json.enc`), os backups e o `credentials.env` ficam **fora**
+> do binário; remova-os apenas se quiser apagar as credenciais de vez.
+
+## 10. Referências Cruzadas
 
 - [Índice dos manuais](README.md)
 - [Instalação Linux](INSTALL_LINUX.md)

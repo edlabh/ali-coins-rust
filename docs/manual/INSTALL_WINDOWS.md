@@ -13,7 +13,9 @@ Guia para Windows 10 e Windows 11 (x86_64). Para Linux/macOS, veja
 6. [Agendamento automático diário (Task Scheduler)](#6-agendamento-automático-diário-task-scheduler)
 7. [Exportação e importação de sessão](#7-exportação-e-importação-de-sessão)
 8. [Resolução de problemas frequentes no Windows](#8-resolução-de-problemas-frequentes-no-windows)
-9. [Referências cruzadas](#9-referências-cruzadas)
+9. [Variáveis de ambiente (PowerShell/CMD)](#9-variáveis-de-ambiente-powershellcmd)
+10. [Atualização e desinstalação](#10-atualização-e-desinstalação)
+11. [Referências cruzadas](#11-referências-cruzadas)
 
 ## 1. Requisitos mínimos
 
@@ -179,7 +181,47 @@ Use o **Windows Terminal** (recomendado) e, em scripts CMD antigos,
 - `$env:ALI_COINS_CHROME = "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"`;
 - reinicie o terminal após definir a variável.
 
-## 9. Referências Cruzadas
+## 9. Variáveis de Ambiente (PowerShell/CMD)
+
+O port lê tudo do `credentials.env`; variáveis do processo vencem quando definidas.
+
+```powershell
+# Sessão atual (PowerShell)
+$env:ALI_COINS_CHROME = "C:\Program Files\Google\Chrome\Application\chrome.exe"
+$env:CHROMIUM_LOW_MEMORY = "false"
+
+# Permanente (vale em novos terminais)
+setx ALI_COINS_CHROME "C:\Program Files\Google\Chrome\Application\chrome.exe"
+```
+
+```bat
+:: Sessão atual (CMD)
+set ALI_COINS_CHROME=C:\Program Files\Google\Chrome\Application\chrome.exe
+```
+
+> Prefira o `credentials.env` para manter tudo em um único lugar — e, no
+> PowerShell 5.1, salve-o em **UTF-8 sem BOM** (use o Notepad/VS Code; o
+> `Set-Content -Encoding utf8` do PS 5.1 adiciona BOM).
+
+## 10. Atualização e Desinstalação
+
+### Atualizar
+
+1. Baixe o novo tarball `...-windows-x86_64.tar.gz` e valide o hash;
+2. substitua o `ali-coins.exe` na pasta (feche execuções em andamento);
+3. o agendamento aponta para o wrapper (`run_all.ps1`) — **nada muda**.
+
+### Desinstalar
+
+```powershell
+schtasks /Delete /TN "ali-coins-rust" /F          # remove o agendamento
+Remove-Item -Recurse -Force C:\ali-coins-rust     # binário + sessões + segredos
+Remove-Item -Recurse -Force "$env:LOCALAPPDATA\ms-playwright"  # opcional
+```
+
+> Apague a pasta apenas se quiser remover **também** sessão e credenciais.
+
+## 11. Referências Cruzadas
 
 - [Índice dos manuais](README.md)
 - [Instalação Linux](INSTALL_LINUX.md)

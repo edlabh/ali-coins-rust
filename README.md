@@ -71,21 +71,37 @@ para o detalhamento.
 
 ## Início Rápido (3 Passos)
 
-### 1. Compilar (ou baixar o binário)
+### 1. Instalar (escolha sua plataforma)
+
+| Plataforma | Release | Compilar do zero |
+|---|---|---|
+| **Linux** x86_64 | `ali-coins-rust-<versão>-linux-x86_64.tar.gz` | `cargo build --release -p ali-coins-cli` |
+| **macOS** Apple Silicon | `...-macos-aarch64.tar.gz` | idem (toolchain do `rustup`) |
+| **macOS** Intel | `...-macos-x86_64.tar.gz` | idem |
+| **Windows** x64 | `...-windows-x86_64.tar.gz` (`ali-coins.exe`) | idem + Build Tools C++ (MSVC) |
 
 ```bash
-# Opção A — compilar do zero (Rust stable; ver docs/manual/INSTALL_LINUX.md)
-cargo build --release -p ali-coins-cli      # binário: target/release/ali-coins
+# Linux/macOS — binário da release
+tar -xzf ali-coins-rust-<versão>-<plataforma>.tar.gz
+install -m 755 ali-coins ~/.local/bin/ali-coins
 
-# Opção B — baixar o tarball da release (GitHub Releases)
-# ali-coins-rust-<versão>-linux-x86_64.tar.gz + .sha256
+# Windows (PowerShell) — binário da release
+tar -xzf ali-coins-rust-<versão>-windows-x86_64.tar.gz
+# valide o hash e coloque ali-coins.exe em C:\ali-coins-rust\
 ```
+
+Guias por sistema: [Linux](docs/manual/INSTALL_LINUX.md) ·
+[macOS](docs/manual/INSTALL_MACOS.md) ·
+[Windows](docs/manual/INSTALL_WINDOWS.md).
 
 ### 2. Configurar credenciais
 
 ```bash
-cp credentials.env.example credentials.env
-chmod 600 credentials.env                    # ALI_USER / ALI_PASSWORD / SESSION_SECRET
+# Linux/macOS
+cp credentials.env.example credentials.env && chmod 600 credentials.env
+# Windows (PowerShell)
+Copy-Item credentials.env.example credentials.env    # edite com notepad
+# (ALI_USER / ALI_PASSWORD / SESSION_SECRET)
 ```
 
 ### 3. Validar e executar
@@ -93,8 +109,21 @@ chmod 600 credentials.env                    # ALI_USER / ALI_PASSWORD / SESSION
 ```bash
 ali-coins --dry-run --json                   # valida sem navegador
 ali-coins all                                # check-in + tarefas (recomendado)
-./wrappers/run_all.sh                        # execução unificada com retentativa (cron)
+./wrappers/run_all.sh                        # Linux/macOS: execução unificada (cron)
+.\wrappers\run_all.ps1                       # Windows: idem (Task Scheduler)
 ```
+
+## Instalação por Plataforma (detalhes)
+
+| Plataforma | Agendamento | Observações |
+|---|---|---|
+| [Linux](docs/manual/INSTALL_LINUX.md) | cron | VPS: imagem de runtime Docker + binário pré-compilado ([detalhes](docs/manual/INSTALL_LINUX.md#7-docker)) |
+| [macOS](docs/manual/INSTALL_MACOS.md) | cron ou **launchd** | [Gatekeeper](docs/manual/INSTALL_MACOS.md#c-gatekeeper--desenvolvedor-não-identificado) e [atualização/desinstalação](docs/manual/INSTALL_MACOS.md#9-atualização-e-desinstalação) |
+| [Windows](docs/manual/INSTALL_WINDOWS.md) | **Task Scheduler** | [variáveis de ambiente](docs/manual/INSTALL_WINDOWS.md#9-variáveis-de-ambiente-powershellcmd), [execução de scripts](docs/manual/INSTALL_WINDOWS.md#c-execução-de-scripts-desabilitada) e [atualização/desinstalação](docs/manual/INSTALL_WINDOWS.md#10-atualização-e-desinstalação) |
+
+> O port usa o **mesmo `credentials.env`** nos três sistemas; variáveis de
+> ambiente do shell (opcionais) são lidas apenas quando definidas (a precedência
+> é: ambiente do processo > `credentials.env` > defaults).
 
 ## Credenciais (`credentials.env`)
 
