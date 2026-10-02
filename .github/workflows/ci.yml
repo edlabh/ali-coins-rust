@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -64,7 +64,7 @@ jobs:
       matrix:
         os: [macos-latest, windows-latest]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Toolchain (pinada 1.99.0)
         shell: bash
@@ -90,7 +90,7 @@ jobs:
     timeout-minutes: 45
     needs: lint-and-test
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Toolchain (llvm-tools)
         run: rustup toolchain install 1.99.0 --profile minimal --component llvm-tools
@@ -118,7 +118,7 @@ jobs:
     timeout-minutes: 20
     needs: lint-and-test
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: taiki-e/install-action@v2
         with:
@@ -141,7 +141,7 @@ jobs:
     timeout-minutes: 40
     needs: lint-and-test
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Build da imagem
         run: docker build -t ali-coins-rust:ci .
         env:

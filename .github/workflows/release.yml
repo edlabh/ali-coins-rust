@@ -34,7 +34,7 @@ jobs:
             binary: ali-coins.exe
             artifact: windows-x86_64
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Toolchain (pinada 1.99.0 + target)
         shell: bash
