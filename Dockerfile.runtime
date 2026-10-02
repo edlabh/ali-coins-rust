@@ -1,0 +1,50 @@
+# Imagem de runtime do ali-coins-rust para VPS (1 vCPU).
+#
+# Em vez de recompilar o workspace dentro do Docker a cada atualização, esta
+# imagem recebe o binário JÁ COMPILADO (`ali-coins`) no contexto de build e
+# monta só o runtime com as libs do Chromium. Build típico: segundos (a camada
+# do apt fica em cache; só o COPY do binário muda).
+#
+# Uso (na VPS, a partir da raiz do fonte):
+#   wrappers/build-runtime-image.sh            # binário: target/release/ali-coins
+#   wrappers/build-runtime-image.sh <bin> <tag>
+#
+# Ou manualmente:
+#   cp target/release/ali-coins .
+#   docker build -f Dockerfile.runtime -t ali-coins-rust:latest .
+FROM debian:bookworm-slim AS runtime
+ARG APP_UID=10001
+ARG APP_GID=10001
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        libnss3 libnspr4 libasound2 \
+        libatk1.0-0 libatk-bridge2.0-0 libcups2 \
+        libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 \
+        libgbm1 libpango-1.0-0 libcairo2 libatspi2.0-0 \
+        libx11-6 libxcb1 libxext6 \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN groupadd --gid "${APP_GID}" appuser \
+    && useradd --uid "${APP_UID}" --gid "${APP_GID}" --create-home --shell /usr/sbin/nologin appuser \
+    && mkdir -p /app/scratch \
+    && chown -R appuser:appuser /app
+
+WORKDIR /app
+COPY ali-coins /usr/local/bin/ali-coins
+
+ENV ALI_COINS_HOME=/app \
+    SCRATCH_DIR=/app/scratch \
+    NO_SANDBOX=true
+
+USER appuser
+
+HEALTHCHECK --interval=10m --timeout=30s --start-period=90s --retries=5 \
+    CMD ["ali-coins", "--dry-run", "--json"]
+
+STOPSIGNAL SIGTERM
+# ENTRYPOINT no binário da imagem: `docker run imagem checkin --json` funciona
+# direto. Para rodar um binário montado do host, use `--entrypoint /data/ali-coins`.
+ENTRYPOINT ["ali-coins"]
+CMD ["--dry-run", "--json"]

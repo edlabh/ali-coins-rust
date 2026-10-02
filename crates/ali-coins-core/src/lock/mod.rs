@@ -21,7 +21,16 @@ pub const MAX_ACQUIRE_ATTEMPTS: u32 = 5;
 const LOCK_READ_GRACE_MS: u64 = 900;
 const LOCK_READ_RETRY_MS: u64 = 150;
 const CLOCK_SKEW_TOLERANCE_MS: i64 = 5 * 60 * 1000;
-/// Códigos de erro de FS sem suporte a hardlink.
+/// Código de "já existe" do sistema (`EEXIST` no Unix; `ERROR_ALREADY_EXISTS` no Windows).
+#[cfg(unix)]
+const ERR_EXISTS: i32 = 17;
+#[cfg(windows)]
+const ERR_EXISTS: i32 = 183;
+#[cfg(not(any(unix, windows)))]
+const ERR_EXISTS: i32 = 17;
+
+/// Códigos de erro de FS sem suporte a hardlink (por SO).
+#[cfg(unix)]
 const LINK_UNSUPPORTED_CODES: [i32; 5] = [
     18, // EXDEV
     1,  // EPERM
@@ -29,6 +38,16 @@ const LINK_UNSUPPORTED_CODES: [i32; 5] = [
     95, // EOPNOTSUPP / ENOTSUP
     31, // EMLINK
 ];
+#[cfg(windows)]
+const LINK_UNSUPPORTED_CODES: [i32; 5] = [
+    1,    // ERROR_INVALID_FUNCTION
+    17,   // ERROR_NOT_SAME_DEVICE
+    50,   // ERROR_NOT_SUPPORTED
+    5,    // ERROR_ACCESS_DENIED (cai para O_EXCL)
+    1314, // ERROR_PRIVILEGE_NOT_HELD
+];
+#[cfg(not(any(unix, windows)))]
+const LINK_UNSUPPORTED_CODES: [i32; 5] = [18, 1, 38, 95, 31];
 
 /// Conteúdo do lockfile.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -327,9 +346,25 @@ pub fn is_process_alive(pid: u32) -> bool {
             Err(_) => false,
         }
     }
-    #[cfg(not(unix))]
+    #[cfg(windows)]
     {
-        // Fora do Unix não há verificação barata; assume vivo (fail-safe).
+        // `tasklist` é nativo do Windows e não depende de APIs externas.
+        use std::process::Command;
+        let output = Command::new("tasklist")
+            .args(["/FI", &format!("PID eq {pid}"), "/NH"])
+            .output();
+        match output {
+            Ok(out) => {
+                let text = String::from_utf8_lossy(&out.stdout);
+                text.contains(&pid.to_string())
+            }
+            // Se o `tasklist` não estiver disponível, assume vivo (fail-safe).
+            Err(_) => true,
+        }
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        // Plataformas sem verificação barata; assume vivo (fail-safe).
         true
     }
 }
@@ -405,7 +440,7 @@ fn publish_lock_via_link(path: &Path, serialized: &str) -> Result<PublishResult,
             PublishResult::Created
         }
         Err(err) => match err.raw_os_error() {
-            Some(17) => PublishResult::Exists, // EEXIST
+            Some(code) if code == ERR_EXISTS => PublishResult::Exists,
             Some(code) if LINK_UNSUPPORTED_CODES.contains(&code) => PublishResult::Unsupported,
             _ => {
                 let _ = std::fs::remove_file(&temp_path);
@@ -427,7 +462,7 @@ fn publish_lock_via_wx(path: &Path, serialized: &str) -> Result<(), PublishError
     }
     let mut file = match options.open(path) {
         Ok(file) => file,
-        Err(err) if err.raw_os_error() == Some(17) => return Err(PublishError::Exists),
+        Err(err) if err.raw_os_error() == Some(ERR_EXISTS) => return Err(PublishError::Exists),
         Err(err) => return Err(PublishError::Io(err.to_string())),
     };
     if let Err(err) = std::io::Write::write_all(&mut file, serialized.as_bytes()) {
@@ -714,7 +749,7 @@ mod tests {
         assert!(guard.path().exists());
         let data = guard.data().clone();
         assert_eq!(data.pid, std::process::id());
-        assert!(!data.lock_id.is_empty());
+        assert_ne!(data.lock_id, "");
 
         #[cfg(unix)]
         {
@@ -781,16 +816,14 @@ mod tests {
         assert!(guard.path().exists());
     }
 
+    #[cfg(unix)]
     #[test]
     fn remove_symlink_suspeito() {
         let dir = tempfile::tempdir().unwrap();
         let options = options_for(dir.path());
         let target = dir.path().join("alvo");
         std::fs::write(&target, "x").unwrap();
-        #[cfg(unix)]
         std::os::unix::fs::symlink(&target, &options.path).unwrap();
-        #[cfg(not(unix))]
-        return;
         let guard = acquire(&options).expect("removeu symlink");
         assert!(guard.path().exists());
     }

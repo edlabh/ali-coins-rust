@@ -112,9 +112,7 @@ pub fn run(args: &[String]) -> StdExitCode {
             let launch_options = LaunchOptions {
                 headless: config.headless,
                 args,
-                executable_path: std::env::var("ALI_COINS_CHROME")
-                    .ok()
-                    .map(std::path::PathBuf::from),
+                executable_path: ali_coins_browser::launch::resolve_chromium_path(&env),
                 user_data_dir: Some(fresh_profile_dir()),
                 env: Vec::new(),
             };

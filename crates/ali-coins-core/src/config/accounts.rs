@@ -324,14 +324,12 @@ mod tests {
         let accounts = load_accounts(&env, Path::new("/tmp"));
         assert_eq!(accounts.len(), 1);
         let expected = sha256_hex("user@example.com");
-        assert!(
-            accounts[0]
-                .session_path
-                .to_string_lossy()
-                .starts_with("/tmp/session.json")
+        assert_eq!(
+            accounts[0].session_path,
+            Path::new("/tmp").join("session.json")
         );
         assert_eq!(accounts[0].index, 1);
-        assert!(!expected.is_empty());
+        assert_ne!(expected, "");
     }
 
     #[test]
@@ -348,8 +346,8 @@ mod tests {
         assert_eq!(accounts[0].index, 1);
         assert_eq!(accounts[1].index, 2);
         let hash = sha256_hex("two@example.com");
-        let expected = format!("/tmp/session_{}.json", &hash[..8]);
-        assert_eq!(accounts[1].session_path.to_string_lossy(), expected);
+        let expected = Path::new("/tmp").join(format!("session_{}.json", &hash[..8]));
+        assert_eq!(accounts[1].session_path, expected);
     }
 
     #[test]

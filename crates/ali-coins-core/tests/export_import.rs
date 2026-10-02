@@ -125,5 +125,5 @@ fn token_adulterado_falha_na_importacao() {
         &[account_for(dir.path(), USER)],
     )
     .expect_err("token inválido");
-    assert!(!error.to_string().is_empty());
+    assert_ne!(error.to_string(), "");
 }

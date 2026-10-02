@@ -20,7 +20,7 @@ jobs:
           fetch-depth: 0
 
       - name: Toolchain (stable com rustfmt/clippy)
-        run: rustup toolchain install stable --component rustfmt,clippy --profile minimal
+        run: rustup toolchain install 1.99.0 --component rustfmt,clippy --profile minimal
 
       - name: Cache de build
         uses: actions/cache@v4
@@ -54,6 +54,36 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  cross-platform:
+    name: testes (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    needs: lint-and-test
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain (pinada 1.99.0)
+        shell: bash
+        run: rustup toolchain install 1.99.0 --profile minimal
+
+      - name: Cache de build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Testes
+        shell: bash
+        run: cargo test --workspace
+
   coverage:
     name: cobertura (gate progressivo)
     runs-on: ubuntu-latest
@@ -63,7 +93,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Toolchain (llvm-tools)
-        run: rustup toolchain install stable --profile minimal --component llvm-tools
+        run: rustup toolchain install 1.99.0 --profile minimal --component llvm-tools
 
       - name: Cache de build
         uses: actions/cache@v4
@@ -114,10 +144,13 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build da imagem
         run: docker build -t ali-coins-rust:ci .
+        env:
+          DOCKER_BUILDKIT: "1"
       - name: Smoke do healthcheck (dry-run precisa de credenciais fake)
         run: |
           docker run --rm \
             -e ALI_USER=ci@example.com \
             -e ALI_PASSWORD=ci \
             -e ENCRYPT_LOCAL_SESSION=false \
-            ali-coins-rust:ci --dry-run --json | head -5
+            ali-coins-rust:ci --dry-run --json > /tmp/smoke.json
+          head -5 /tmp/smoke.json

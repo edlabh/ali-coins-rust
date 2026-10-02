@@ -9,15 +9,36 @@ permissions:
   contents: write
 
 jobs:
-  build-and-release:
-    name: binário + release
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
+  build:
+    name: binário (${{ matrix.artifact }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            binary: ali-coins
+            artifact: linux-x86_64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            binary: ali-coins
+            artifact: macos-aarch64
+          - os: macos-13
+            target: x86_64-apple-darwin
+            binary: ali-coins
+            artifact: macos-x86_64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            binary: ali-coins.exe
+            artifact: windows-x86_64
     steps:
       - uses: actions/checkout@v4
 
-      - name: Toolchain
-        run: rustup toolchain install stable --profile minimal
+      - name: Toolchain (pinada 1.99.0 + target)
+        shell: bash
+        run: rustup toolchain install 1.99.0 --profile minimal && rustup target add --toolchain 1.99.0 ${{ matrix.target }}
 
       - name: Cache
         uses: actions/cache@v4
@@ -26,27 +47,37 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-release-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-${{ matrix.target }}-release-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Build de release
-        run: cargo build --release -p ali-coins-cli
+        shell: bash
+        run: cargo build --release --target ${{ matrix.target }} -p ali-coins-cli
 
-      - name: Empacotar
+      - name: Empacotar + checksum
+        shell: bash
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          ARCHIVE="ali-coins-rust-${VERSION}-linux-x86_64.tar.gz"
-          tar -C target/release -czf "$ARCHIVE" ali-coins
-          sha256sum "$ARCHIVE" > "$ARCHIVE.sha256"
+          ARCHIVE="ali-coins-rust-${VERSION}-${{ matrix.artifact }}.tar.gz"
+          tar -C "target/${{ matrix.target }}/release" -czf "$ARCHIVE" "${{ matrix.binary }}"
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum "$ARCHIVE" > "$ARCHIVE.sha256"
+          else
+            # Windows (Git Bash): sha256sum não existe; usa PowerShell.
+            powershell -NoProfile -Command "(Get-FileHash -Algorithm SHA256 '$ARCHIVE').Hash.ToLower() + '  $ARCHIVE'" > "$ARCHIVE.sha256"
+          fi
+          echo "ARCHIVE=$ARCHIVE" >> "$GITHUB_ENV"
 
-      - name: Publicar release
+      - name: Publicar artefatos no release
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          ARCHIVE="ali-coins-rust-${VERSION}-linux-x86_64.tar.gz"
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
             gh release upload "$GITHUB_REF_NAME" "$ARCHIVE" "$ARCHIVE.sha256" --clobber
           else
             gh release create "$GITHUB_REF_NAME" "$ARCHIVE" "$ARCHIVE.sha256" \
-              --title "$GITHUB_REF_NAME" --generate-notes
+              --title "$GITHUB_REF_NAME" --generate-notes || true
+            # Corrida entre os jobs do matrix: se outro job criou antes,
+            # reenvia (clobber) para garantir os quatro artefatos.
+            gh release upload "$GITHUB_REF_NAME" "$ARCHIVE" "$ARCHIVE.sha256" --clobber
           fi
