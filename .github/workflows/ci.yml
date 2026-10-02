@@ -3,7 +3,17 @@ name: CI
 on:
   push:
     branches: [main, master]
+    # Mudanças apenas de documentação não precisam da matriz pesada
+    # (cobertura/macOS/Windows/Docker).
+    paths-ignore:
+      - "docs/**"
+      - "**.md"
+      - ".gitignore"
   pull_request:
+    paths-ignore:
+      - "docs/**"
+      - "**.md"
+      - ".gitignore"
 
 env:
   CARGO_TERM_COLOR: always
