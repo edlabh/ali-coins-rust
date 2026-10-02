@@ -797,16 +797,14 @@ mod tests {
         assert!(guard.path().exists());
     }
 
+    #[cfg(unix)]
     #[test]
     fn remove_symlink_suspeito() {
         let dir = tempfile::tempdir().unwrap();
         let options = options_for(dir.path());
         let target = dir.path().join("alvo");
         std::fs::write(&target, "x").unwrap();
-        #[cfg(unix)]
         std::os::unix::fs::symlink(&target, &options.path).unwrap();
-        #[cfg(not(unix))]
-        return;
         let guard = acquire(&options).expect("removeu symlink");
         assert!(guard.path().exists());
     }
