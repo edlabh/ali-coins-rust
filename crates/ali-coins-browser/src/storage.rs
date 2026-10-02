@@ -234,7 +234,7 @@ mod tests {
         let merged = merge_origins(&visited, Some("https://m.aliexpress.com"));
         assert_eq!(merged, visited);
         let merged = merge_origins(&[], Some("about:blank"));
-        assert!(merged.is_empty());
+        assert_eq!(merged.len(), 0);
     }
 
     #[test]

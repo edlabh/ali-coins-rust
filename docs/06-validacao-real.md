@@ -286,6 +286,114 @@ desktop, tanto no check-in quanto nas tarefas (como o oráculo):
   (`alreadyCollected=false`, `streakDays 3→4`) e o saldo pós-check-in foi
   sincronizado (`1128`) enquanto o extrato não refletia o crédito.
 
+## Fase 5 — hardening do CI (01/10/2026)
+
+- **Auditoria bloqueante**: `cargo audit` sem `|| true` (0 vulnerabilidades; aviso
+  de versão yanked apenas), com ferramenta pré-compilada via `taiki-e/install-action`.
+- **Cobertura**: job `coverage` com `cargo llvm-cov --workspace --summary-only` e
+  gate progressivo em **61%** — medido em 01/10: **61,74% de linhas** (14.473
+  linhas, 8.936 cobertas). Meta de 80% registrada como pendência: as maiores
+  lacunas são o glue de CLI (`run_all`/`run_checkin`/`run_tasks`, que dependem de
+  browser real) e o CDP/tarefas DOM (smoke `#[ignore]`).
+- **SBOM**: job `sbom` gera CycloneDX JSON (`cargo cyclonedx --format json`) e
+  publica `*.cdx.json` como artefato do workflow.
+- **Dependabot**: `.github/dependabot.yml` para `cargo`, `github-actions` e
+  `docker` (semanal, PRs agrupados para minor/patch).
+- **Dockerfile**: `ARG CARGO_BUILD_JOBS=1` e `CARGO_PROFILE_RELEASE_LTO=false`
+  por padrão, permitindo build da imagem na VPS de baixa memória.
+- **Imagem própria no runner da VM (01/10)**: `ali-coins-rust:latest` (201 MB) gerada a
+  partir do binário pré-compilado (`Dockerfile.runtime` + `wrappers/build-runtime-image.sh`);
+  `docker-run.sh`/`run.sh` da VM usam a imagem com `--entrypoint /data/ali-coins` (binário
+  montado) e `ENTRYPOINT ["ali-coins"]` na imagem. Tempos medidos na VPS (1 vCPU):
+  binário incremental **5m47s**, imagem de runtime **26s** (primeira) e **4s** (seguinte);
+  o build completo (CI) usa `codegen-units=16`, `LTO=false` e cache do BuildKit.
+  O smoke do CI foi corrigido para não mascarar o exit code do container (`| head`).
+
+- **Toolchain pinada (01/10)**: `rust-toolchain.toml` e Dockerfile fixam **1.99.0**
+  (antes `channel = "stable"`). Motivo: cada container `rust:bookworm` sincronizava
+  o stable e, quando saía versão nova, o cargo invalidava o cache e recompilava
+  tudo (166 crates na recompilação de 01/10 após o stable virar 1.99.0). Com a
+  versão fixa, o `target/` continua válido entre builds.
+
+## Recuperação da página principal nas tarefas (01/10/2026)
+
+A execução do cron de 01/10 mostrou a gaveta de tarefas inacessível **após** a
+tarefa "Browse surprise items" (o site não registrou os toques — D-10), com
+"painel de tarefas fechado ou não detectado" até encerrar a etapa. As tarefas
+executadas antes (check-in +1, sponsored +5+5) concluíram; o relatório ficou só
+com as 3 tarefas app-only desativadas porque a extração final da gaveta falhou
+(mesma lógica do oráculo nesse cenário).
+
+Correções aplicadas:
+
+- **`ensure_main_page`** (port fiel de `ensureMainPage`): recria a página
+  principal quando ela está **fechada** (com device profile Pixel 7 e navegação
+  para a central mobile) e navega para a central quando a URL não é dela.
+- **`get_drawer_tasks_with_retry` devolve a página ativa**; o runner passa a
+  substituir o handle quando a original fecha (antes o retry repetia no mesmo
+  estado, sem recuperação).
+- **Diagnóstico em falha da gaveta**: URL, título, trecho do corpo e screenshot
+  `0600` em `scratch/` — explica a causa na próxima ocorrência.
+- **Proteção extra**: `close_new_tabs`/`close_orphan_pages` nunca fecham páginas
+  da central de moedas (o matching por URL podia fechar a página principal).
+- **Testes**: 2 novos no crate de flows (página fechada recriada na central;
+  página viva com URL errada navegada sem recriar) — 47 testes no crate,
+  workspace e clippy verdes.
+
+### Reforço após execução real (01/10, 12:39–12:47 UTC)
+
+Execução real autorizada com a imagem nova (`ali-coins-rust:latest` + binário
+12:31) reproduziu o travamento: após a tarefa "Browse surprise items" (toques
+seguem não registrados pelo site: `tracking=63->63`), a gaveta não reabriu. O
+diagnóstico novo capturou:
+
+- URL correta (`https://m.aliexpress.com/p/coin-index/index.html?_immersiveMode=true&from=pc302`);
+- `título=""` e corpo com a tela de check-in ("Blind Box", "day streak", dígitos);
+- screenshots `scratch/tasks-drawer-falha-*.png` mostrando a central **sem o
+  botão "Ganhe mais moedas"** — estado do site, não lock nem crash.
+
+Reforços aplicados (commit `40a9ff8`):
+
+- `open_task_drawer` tenta **clique real de mouse** no centro do botão
+  (equivalente ao `taskBtn.click()` do Playwright), além do clique via JS;
+- `get_drawer_tasks_with_retry` **recarrega a central uma vez**
+  (`location.reload()`) quando a gaveta não abre, resetando o estado antes das
+  próximas tentativas;
+- Nas falhas anteriores (30/09 e 01/10), o runner encerrava a etapa após ~2 min
+  de retries — agora há recuperação ativa.
+
+### Surpresa preventiva e visibilidade da fila (01/10, tarde)
+
+A execução real mostrou o ciclo: a surpresa toca itens mesmo **sem progresso** de
+`tracking`, e cada rodada derruba a gaveta (a Cupons e as demais tarefas da fila
+ficam sem execução; o oráculo marca a surpresa como "sem progresso após 3
+tentativas" e segue). Correções (commit `88b0054`):
+
+- `execute_surprise_items` **para após 2 toques seguidos sem progresso** de
+  `tracking` (antes tocava 3–4 por tentativa e o runner reexecutava);
+- o fallback de detalhe não roda quando não houve progresso;
+- o runner agora **registra a lista extraída** do painel
+  (`Painel de tarefas (N): título [botão] | ...`), permitindo auditar a fila a
+  cada leitura (ex.: confirmar se "Coupons & shopping credits for you!" estava
+  presente).
+
+## Validação local e causa provável do D-10 (01/10, tarde — máquina do operador)
+
+Execuções na máquina local (rede residencial) e comparação direta com o oráculo
+Node (mesma sessão importada da VM):
+
+- O **oráculo local abriu a gaveta e executou as tarefas**; a surpresa falhou
+  com "sem progresso após 3 tentativas" (mesmo comportamento da VM).
+- O **port não abria a gaveta** mesmo clicando no botão correto
+  (`button.aecoin-signButton-13WeJ`, `elementFromPoint` no próprio botão).
+- Causa: a emulação `Emulation.setEmitTouchEventsForMouse` (mobile) converte
+  **todo input de mouse em toque**; o Playwright emite **mouse** em `click()` e
+  toque apenas em `tap()`. Com a conversão o site ignorava o clique.
+- Correção: conversão **desligada por padrão** (`PW_EMIT_TOUCH=1` reativa);
+  validado localmente — a gaveta abre e o painel é lido (exit 2, sem ações
+  pendentes no dia). Isso deve explicar também o `tracking=N->N` da surpresa no
+  port (os toques viravam eventos de toque), a confirmar no próximo ciclo.
+
 ## D-02 residual — sessão importada expirada (01/10/2026) — validado com fixtures
 
 Fechado o último item funcional de notificação: o `failure` de conta única passa a

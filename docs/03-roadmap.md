@@ -105,7 +105,7 @@ Escopo: `flows::tasks` (state, verifier, surprise, search, prizeland, dispatcher
 
 ## Fase 5 — Multi-conta + infra (1,5–2 semanas)
 
-**Status: em andamento (2026-09-28 → 10-01).** Concluído: `Dockerfile` multi-stage (builder Rust + runtime Debian com libs do Chromium, usuário 10001, healthcheck dry-run), `.dockerignore` com segredos ignorados, subcomandos `all`/`checkin`/`tasks` para o wrapper, **multi-conta sequencial** (por processo filho, com lock por conta, backoff/jitter, relatório e notificação consolidados — validado só com **mocks**, sem contas reais) e **release `v0.1.0`** publicada. **Hardening do CI (01/10)**: `cargo audit` **bloqueante**, **cobertura** `cargo llvm-cov` com **gate progressivo em 61%** (medido: **61,7% de linhas**; meta do roadmap: 80%), **SBOM CycloneDX** publicado como artefato, **Dependabot** (cargo/actions/docker) e `Dockerfile` com args de baixa memória (`CARGO_BUILD_JOBS=1`, LTO off) para build na VPS. Pendentes: elevar a cobertura à meta (testes de fluxo com mock; CLI/CDP dependem de browser real), `cargo deny` além do `audit` e **imagem própria no runner da VM** (em andamento).
+**Status: em andamento (2026-09-28 → 10-01).** Concluído: `Dockerfile` multi-stage (builder Rust + runtime Debian com libs do Chromium, usuário 10001, healthcheck dry-run), `.dockerignore` com segredos ignorados, subcomandos `all`/`checkin`/`tasks` para o wrapper, **multi-conta sequencial** (por processo filho, com lock por conta, backoff/jitter, relatório e notificação consolidados — validado só com **mocks**, sem contas reais) e **release `v0.1.0`** publicada. **Hardening do CI (01/10)**: `cargo audit` **bloqueante**, **cobertura** `cargo llvm-cov` com **gate progressivo em 61%** (medido: **61,7% de linhas**; meta do roadmap: 80%), **SBOM CycloneDX** publicado como artefato, **Dependabot** (cargo/actions/docker) e `Dockerfile` com args de baixa memória (`CARGO_BUILD_JOBS=1`, LTO off) para build na VPS. Pendentes: elevar a cobertura à meta (testes de fluxo com mock; CLI/CDP dependem de browser real) e `cargo deny` além do `audit`. **Imagem própria no runner da VM concluída em 01/10** (`Dockerfile.runtime` + binário pré-compilado; build de segundos).
 
 Escopo: multi-conta sequencial com atrasos/backoff/notificações por conta; Docker multi-stage (UID/GID 10001); CI/CD; wrappers.
 
@@ -125,10 +125,13 @@ Escopo: multi-conta sequencial com atrasos/backoff/notificações por conta; Doc
 
 ## Fase 6 — Corte e descomissionamento (1 semana + 14 dias de observação)
 
-**Status: iniciada (2026-09-30).** Janela de observação proposta de
+**Status: iniciada (2026-09-30).** Janela de observação de
 **01/10 a 14/10** com os dois crons intactos (Node 09:30 UTC, Rust 11:30 UTC);
 acompanhamento em [`07-fase6-observacao.md`](07-fase6-observacao.md)
-(baseline de 30/09, planilha diária e critérios de encerramento).
+(baseline de 30/09, planilha diária e critérios de encerramento). **01/10 (dia 1)**:
+Node `exit=0` em 12m23s (3321 moedas, conta `ag***`) e Rust `exit=0` em 12m22s
+(1130 moedas, conta `edelanoali`), ambos sem travas — contas diferentes, como
+registrado no doc de observação.
 
 **Entregáveis**
 - Período paralelo: Node e Rust rodando no mesmo horário (contas distintas ou alternância controlada) por 14 dias.
@@ -176,7 +179,7 @@ acompanhamento em [`07-fase6-observacao.md`](07-fase6-observacao.md)
 ## Questões abertas (aprovação)
 
 1. **Autorizar instalação do Rust toolchain** (`rustup`, estável 1.85+) nesta máquina?
-2. **Prioridade de plataformas**: Linux (VPS) primeiro e Windows/macOS em fase posterior — ok? (o original suporta os três)
+2. **Prioridade de plataformas**: Linux (VPS) primeiro e Windows/macOS em fase posterior — **atendido em 02/10/2026**: macOS e Windows receberam manuais (`docs/manual/INSTALL_MACOS.md`, `INSTALL_WINDOWS.md`), wrappers `.ps1`/`.bat`, descoberta de Chromium por SO e jobs de CI/release multi-plataforma.
 3. **Sidecar Playwright** deve ficar só como ferramenta de paridade ou também como fallback opcional no produto?
 4. **Vídeo de diagnóstico** (`PW_VIDEO`): manter paridade completa (screencast CDP) ou aceitar degradação para trace+screenshot na v1 Rust?
 5. **Repositório**: usar este workspace `ali-coins-rust` como repositório novo (o clone do oráculo fica em `reference/`, ignorado pelo git)?

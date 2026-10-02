@@ -1,16 +1,37 @@
-# Build multi-stage do ali-coins-rust.
-# Estágio 1: compila o binário com o workspace completo.
-# Os args permitem build de baixa memória na VPS (jobs=1, LTO desligado).
-FROM rust:1.85-bookworm AS builder
+# Build multi-stage do ali-coins-rust (imagem completa; usada pelo CI).
+#
+# Na VPS (1 vCPU), prefira `Dockerfile.runtime` + `wrappers/build-runtime-image.sh`:
+# o binário é compilado uma vez no host (target incremental) e a imagem de
+# runtime fica pronta em segundos, sem recompilar o workspace.
+#
+# Args de build:
+#   CARGO_BUILD_JOBS                    (padrão 1 — baixa memória)
+#   CARGO_PROFILE_RELEASE_LTO           (padrão false — o perfil do workspace usa
+#                                        LTO thin, caro em 1 vCPU)
+#   CARGO_PROFILE_RELEASE_CODEGEN_UNITS (padrão 16 — o perfil usa 1, o que
+#                                        serializa/atrasa o codegen)
+#
+# O cache do BuildKit mantém registry/git/target entre builds: quando só o
+# código muda, o cargo recompila apenas o que mudou (builds incrementais).
+# Toolchain pinada em `rust-toolchain.toml` (1.99.0). Usamos a tag `bookworm`
+# (e não `1.99-bookworm`) porque a tag versionada pode não existir no registry;
+# o rustup instala a versão exata pinada dentro do build.
+FROM rust:bookworm AS builder
 ARG CARGO_BUILD_JOBS=1
 ARG CARGO_PROFILE_RELEASE_LTO=false
+ARG CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16
 ENV CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS} \
-    CARGO_PROFILE_RELEASE_LTO=${CARGO_PROFILE_RELEASE_LTO}
+    CARGO_PROFILE_RELEASE_LTO=${CARGO_PROFILE_RELEASE_LTO} \
+    CARGO_PROFILE_RELEASE_CODEGEN_UNITS=${CARGO_PROFILE_RELEASE_CODEGEN_UNITS}
 WORKDIR /src
 COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
 COPY crates ./crates
-# Build de release (LTO configurável; default desligado para caber na VPS).
-RUN cargo build --release -p ali-coins-cli
+# Copia o binário para fora do cache mount (fica na camada da imagem).
+RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,target=/usr/local/cargo/git,sharing=locked \
+    --mount=type=cache,target=/src/target,sharing=locked \
+    cargo build --release -p ali-coins-cli \
+ && cp target/release/ali-coins /usr/local/bin/ali-coins
 
 # Estágio 2: runtime mínimo, sem toolchain, com as libs do Chromium.
 FROM debian:bookworm-slim AS runtime
@@ -33,7 +54,7 @@ RUN groupadd --gid "${APP_GID}" appuser \
     && chown -R appuser:appuser /app
 
 WORKDIR /app
-COPY --from=builder /src/target/release/ali-coins /usr/local/bin/ali-coins
+COPY --from=builder /usr/local/bin/ali-coins /usr/local/bin/ali-coins
 
 ENV ALI_COINS_HOME=/app \
     SCRATCH_DIR=/app/scratch \
@@ -46,4 +67,7 @@ HEALTHCHECK --interval=10m --timeout=30s --start-period=90s --retries=5 \
     CMD ["ali-coins", "--dry-run", "--json"]
 
 STOPSIGNAL SIGTERM
-CMD ["ali-coins", "--dry-run", "--json"]
+# ENTRYPOINT no binário da imagem: `docker run imagem checkin --json` funciona
+# direto. Para rodar um binário montado do host, use `--entrypoint /data/ali-coins`.
+ENTRYPOINT ["ali-coins"]
+CMD ["--dry-run", "--json"]

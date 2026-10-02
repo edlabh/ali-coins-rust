@@ -278,7 +278,8 @@ mod tests {
     }
 
     fn set_mtime(path: &Path, time: SystemTime) {
-        let ft = std::fs::File::open(path).unwrap();
+        // No Windows, alterar o mtime exige um handle com acesso de escrita.
+        let ft = std::fs::OpenOptions::new().write(true).open(path).unwrap();
         ft.set_modified(time).unwrap();
     }
 }

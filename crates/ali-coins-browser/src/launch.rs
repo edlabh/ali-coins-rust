@@ -352,6 +352,101 @@ pub fn should_block_resource(resource_type: &str, url: &str, allow_media: bool) 
     TELEMETRY_HOSTS.iter().any(|host| lower.contains(host))
 }
 
+/// Caminhos relativos do binário do Chromium dentro de um diretório
+/// `chromium-<versão>` do cache do Playwright, por sistema operacional.
+#[must_use]
+pub fn host_chromium_rel_candidates() -> &'static [&'static str] {
+    #[cfg(target_os = "macos")]
+    const CANDIDATES: &[&str] = &[
+        "chrome-mac-arm64/Chromium.app/Contents/MacOS/Chromium",
+        "chrome-mac-x64/Chromium.app/Contents/MacOS/Chromium",
+        "chrome-mac/Chromium.app/Contents/MacOS/Chromium",
+    ];
+    #[cfg(target_os = "windows")]
+    const CANDIDATES: &[&str] = &["chrome-win64/chrome.exe", "chrome-win/chrome.exe"];
+    #[cfg(all(unix, not(target_os = "macos")))]
+    const CANDIDATES: &[&str] = &["chrome-linux64/chrome", "chrome-linux/chrome"];
+    CANDIDATES
+}
+
+/// Subdiretório padrão do cache do Playwright por SO.
+fn playwright_cache_rel() -> &'static str {
+    #[cfg(target_os = "macos")]
+    {
+        "Library/Caches/ms-playwright"
+    }
+    #[cfg(target_os = "windows")]
+    {
+        "AppData/Local/ms-playwright"
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        ".cache/ms-playwright"
+    }
+}
+
+/// Base do cache do Playwright: `PLAYWRIGHT_BROWSERS_PATH` ou o padrão do SO.
+fn playwright_cache_base(env: &EnvSource) -> Option<std::path::PathBuf> {
+    if let Some(value) = env.get("PLAYWRIGHT_BROWSERS_PATH") {
+        let trimmed = value.trim();
+        if !trimmed.is_empty() {
+            return Some(std::path::PathBuf::from(trimmed));
+        }
+    }
+    let home = env
+        .get("HOME")
+        .or_else(|| env.get("USERPROFILE"))
+        .map(str::trim)
+        .filter(|value| !value.is_empty())?;
+    Some(std::path::Path::new(home).join(playwright_cache_rel()))
+}
+
+/// Procura o Chromium de maior versão no cache (`chromium-*`).
+fn chromium_in_base(base: &std::path::Path) -> Option<std::path::PathBuf> {
+    let mut versions: Vec<(u64, std::path::PathBuf)> = Vec::new();
+    for entry in std::fs::read_dir(base).ok()?.flatten() {
+        let name = entry.file_name();
+        let Some(name) = name.to_str() else {
+            continue;
+        };
+        let Some(rest) = name.strip_prefix("chromium-") else {
+            continue;
+        };
+        let Ok(version) = rest.parse::<u64>() else {
+            continue;
+        };
+        if entry.path().is_dir() {
+            versions.push((version, entry.path()));
+        }
+    }
+    versions.sort_by_key(|entry| std::cmp::Reverse(entry.0));
+    for (_, dir) in versions {
+        for rel in host_chromium_rel_candidates() {
+            let candidate = dir.join(rel);
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+    }
+    None
+}
+
+/// Resolve o binário do Chromium (equivalente à descoberta do Playwright):
+/// `ALI_COINS_CHROME` explícito → cache do Playwright (`PLAYWRIGHT_BROWSERS_PATH`
+/// ou padrão por SO, maior versão `chromium-*`) → `None` (o driver usa a
+/// detecção nativa do chromiumoxide: PATH, registro do Windows, instalações usuais).
+#[must_use]
+pub fn resolve_chromium_path(env: &EnvSource) -> Option<std::path::PathBuf> {
+    if let Some(value) = env.get("ALI_COINS_CHROME") {
+        let trimmed = value.trim();
+        if !trimmed.is_empty() {
+            // Explícito vence mesmo se o caminho não existir (erro claro no launch).
+            return Some(std::path::PathBuf::from(trimmed));
+        }
+    }
+    playwright_cache_base(env).and_then(|base| chromium_in_base(&base))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -484,5 +579,41 @@ mod tests {
         assert!(should_disable_dev_shm_usage("linux", Some(64)));
         assert!(!should_disable_dev_shm_usage("linux", Some(256)));
         assert!(should_disable_dev_shm_usage("linux", None));
+    }
+
+    #[test]
+    fn resolve_chromium_prefere_caminho_explicito() {
+        let explicito = env(&[("ALI_COINS_CHROME", "/x/chrome")]);
+        assert_eq!(
+            resolve_chromium_path(&explicito),
+            Some(std::path::PathBuf::from("/x/chrome"))
+        );
+        // Explícito vence mesmo se não existir (erro claro no launch).
+        assert_eq!(
+            resolve_chromium_path(&env(&[("ALI_COINS_CHROME", "/nao/existe")])),
+            Some(std::path::PathBuf::from("/nao/existe"))
+        );
+    }
+
+    #[test]
+    fn resolve_chromium_pega_maior_versao_do_cache() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        for version in ["chromium-100", "chromium-123"] {
+            std::fs::create_dir_all(dir.path().join(version)).expect("dir");
+        }
+        let rel = host_chromium_rel_candidates()[0];
+        let bin = dir.path().join("chromium-123").join(rel);
+        std::fs::create_dir_all(bin.parent().expect("parent")).expect("dirs");
+        std::fs::write(&bin, b"fake").expect("bin");
+
+        let base = dir.path().to_str().expect("utf-8");
+        let cache_env = env(&[("PLAYWRIGHT_BROWSERS_PATH", base)]);
+        assert_eq!(resolve_chromium_path(&cache_env), Some(bin));
+
+        // `PLAYWRIGHT_BROWSERS_PATH` vazio cai no padrão do SO (HOME/USERPROFILE).
+        let home_env = env(&[("PLAYWRIGHT_BROWSERS_PATH", "  "), ("HOME", base)]);
+        // O padrão do SO aponta para `<HOME>/<subdir do SO>`; aqui só garantimos
+        // que a resolução não falha (o layout de teste não existe nesse caminho).
+        let _ = resolve_chromium_path(&home_env);
     }
 }
