@@ -305,6 +305,8 @@ wrappers/build-runtime-image.sh
 ## 11. Referências cruzadas
 
 - [Índice dos manuais](README.md)
+- [Instalação no macOS](INSTALL_MACOS.md)
+- [Instalação no Windows](INSTALL_WINDOWS.md)
 - [Execução em nuvem / sessões](CLOUD_SESSIONS.md)
 - [Telegram](TELEGRAM.md)
 - [Releases](RELEASING.md)

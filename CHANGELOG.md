@@ -4,6 +4,26 @@ Todas as mudanças relevantes deste projeto são documentadas aqui.
 O formato segue [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/)
 e o versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
+## [Não lançado]
+
+### Adicionado
+
+- **macOS e Windows**: suporte oficial com manuais
+  (`docs/manual/INSTALL_MACOS.md`, `docs/manual/INSTALL_WINDOWS.md`), wrappers
+  PowerShell/BAT (`wrappers/*.ps1`, `wrappers/*.bat`) e agendamento via
+  launchd (macOS) e Task Scheduler (Windows).
+- **Descoberta de Chromium por SO** (`launch::resolve_chromium_path`): cache do
+  Playwright (`PLAYWRIGHT_BROWSERS_PATH` ou padrão por sistema), com
+  `ALI_COINS_CHROME` tendo precedência.
+- **CI**: job `cross-platform` (macOS + Windows) rodando a suíte.
+- **Release**: artefatos para Linux x86_64, macOS aarch64/x86_64 e Windows x86_64.
+
+### Corrigido
+
+- `is_process_alive` no Windows via `tasklist` (lock stale deixa de ser tratado
+  como vivo para sempre).
+- Teste de `PW_OUTPUT_DIR` não depende mais de separador Unix.
+
 ## [0.1.0] - 2026-09-30
 
 Release inicial do port em Rust do `ali-coins` (Node.js + Playwright), em

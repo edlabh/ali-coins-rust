@@ -5,6 +5,8 @@ Guias operacionais do `ali-coins-rust`.
 | Manual | Conteúdo |
 |---|---|
 | [INSTALL_LINUX.md](INSTALL_LINUX.md) | Instalação no Linux: Rust, Chromium, credenciais, primeira execução, cron, Docker e troubleshooting |
+| [INSTALL_MACOS.md](INSTALL_MACOS.md) | Instalação no macOS (Apple Silicon/Intel): Rust, Chromium, launchd e troubleshooting |
+| [INSTALL_WINDOWS.md](INSTALL_WINDOWS.md) | Instalação no Windows 10/11: binário/compilação, Chromium, Task Scheduler e troubleshooting |
 | [CLOUD_SESSIONS.md](CLOUD_SESSIONS.md) | VPS: delegação de sessão, transferência, multi-conta, otimizações de RAM, cron, heartbeat e logrotate |
 | [TELEGRAM.md](TELEGRAM.md) | Bot, `CHAT_ID`, variáveis, testes, eventos notificados e troubleshooting |
 | [RELEASING.md](RELEASING.md) | Versionamento, tags, artefatos e rollback |

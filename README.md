@@ -2,7 +2,7 @@
 
 Port em Rust do [ali-coins](https://github.com/edlabh/ali-coins) (Node.js + Playwright):
 automação de check-in diário e tarefas de moedas do AliExpress com emulação mobile
-(Google Pixel 7) via CDP (`chromiumoxide`).
+(Google Pixel 7) via CDP (`chromiumoxide`). Roda em **Linux, macOS e Windows**.
 
 O projeto Node original é mantido em `reference/ali-coins/` como **oráculo de
 paridade** (não versionado) e o comportamento é validado contra ele por fixtures
@@ -252,6 +252,10 @@ ALI_COINS_CHROME=/caminho/chrome ./tools/smoke/run-cdp.sh
 
 - [`docs/manual/INSTALL_LINUX.md`](docs/manual/INSTALL_LINUX.md) — instalação no Linux
   (Rust, Chromium, credenciais, cron e [troubleshooting](docs/manual/INSTALL_LINUX.md#6-resolução-de-problemas-frequentes-troubleshooting))
+- [`docs/manual/INSTALL_MACOS.md`](docs/manual/INSTALL_MACOS.md) — instalação no macOS
+  (Rust, Chromium, [launchd](docs/manual/INSTALL_MACOS.md#6-agendamento-automático-diário-no-macos))
+- [`docs/manual/INSTALL_WINDOWS.md`](docs/manual/INSTALL_WINDOWS.md) — instalação no Windows
+  (binário/compilação, Chromium, [Task Scheduler](docs/manual/INSTALL_WINDOWS.md#6-agendamento-automático-diário-task-scheduler))
 - [`docs/manual/CLOUD_SESSIONS.md`](docs/manual/CLOUD_SESSIONS.md) — VPS, delegação de
   sessão, cron, [heartbeat](docs/manual/CLOUD_SESSIONS.md#9-heartbeat-dead-mans-switch)
   e [logrotate](docs/manual/CLOUD_SESSIONS.md#10-higiene-e-rotação-de-logs-logrotate)

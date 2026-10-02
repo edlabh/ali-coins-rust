@@ -675,7 +675,7 @@ mod tests {
         assert_eq!(config.log_level, LogLevel::Info);
         assert_eq!(config.nav_timeout, 35_000);
         assert!(config.encrypt_local_session);
-        assert_eq!(config.pw_output_dir.to_string_lossy(), "/tmp/scratch");
+        assert_eq!(config.pw_output_dir, Path::new("/tmp").join("scratch"));
     }
 
     #[test]
