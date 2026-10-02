@@ -179,7 +179,7 @@ registrado no doc de observação.
 ## Questões abertas (aprovação)
 
 1. **Autorizar instalação do Rust toolchain** (`rustup`, estável 1.85+) nesta máquina?
-2. **Prioridade de plataformas**: Linux (VPS) primeiro e Windows/macOS em fase posterior — ok? (o original suporta os três)
+2. **Prioridade de plataformas**: Linux (VPS) primeiro e Windows/macOS em fase posterior — **atendido em 02/10/2026**: macOS e Windows receberam manuais (`docs/manual/INSTALL_MACOS.md`, `INSTALL_WINDOWS.md`), wrappers `.ps1`/`.bat`, descoberta de Chromium por SO e jobs de CI/release multi-plataforma.
 3. **Sidecar Playwright** deve ficar só como ferramenta de paridade ou também como fallback opcional no produto?
 4. **Vídeo de diagnóstico** (`PW_VIDEO`): manter paridade completa (screencast CDP) ou aceitar degradação para trace+screenshot na v1 Rust?
 5. **Repositório**: usar este workspace `ali-coins-rust` como repositório novo (o clone do oráculo fica em `reference/`, ignorado pelo git)?

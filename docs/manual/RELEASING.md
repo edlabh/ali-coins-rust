@@ -23,10 +23,12 @@ Guia de versionamento, publicação e rollback do `ali-coins-rust`.
    git tag v0.2.0
    git push origin v0.2.0
    ```
-4. O workflow [`release.yml`](../../.github/workflows/release.yml) compila o binário
-   Linux (`x86_64`) e publica:
+4. O workflow [`release.yml`](../../.github/workflows/release.yml) compila os binários
+   e publica um tarball + `.sha256` por plataforma:
    - `ali-coins-rust-<versão>-linux-x86_64.tar.gz`
-   - `ali-coins-rust-<versão>-linux-x86_64.tar.gz.sha256`
+   - `ali-coins-rust-<versão>-macos-aarch64.tar.gz` (Apple Silicon)
+   - `ali-coins-rust-<versão>-macos-x86_64.tar.gz` (Intel)
+   - `ali-coins-rust-<versão>-windows-x86_64.tar.gz` (`ali-coins.exe`)
 
 ## Release manual (fallback)
 

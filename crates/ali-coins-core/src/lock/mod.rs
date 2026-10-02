@@ -327,9 +327,25 @@ pub fn is_process_alive(pid: u32) -> bool {
             Err(_) => false,
         }
     }
-    #[cfg(not(unix))]
+    #[cfg(windows)]
     {
-        // Fora do Unix não há verificação barata; assume vivo (fail-safe).
+        // `tasklist` é nativo do Windows e não depende de APIs externas.
+        use std::process::Command;
+        let output = Command::new("tasklist")
+            .args(["/FI", &format!("PID eq {pid}"), "/NH"])
+            .output();
+        match output {
+            Ok(out) => {
+                let text = String::from_utf8_lossy(&out.stdout);
+                text.contains(&pid.to_string())
+            }
+            // Se o `tasklist` não estiver disponível, assume vivo (fail-safe).
+            Err(_) => true,
+        }
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        // Plataformas sem verificação barata; assume vivo (fail-safe).
         true
     }
 }
