@@ -16,6 +16,12 @@ updates:
       - dependency-name: "*"
         update-types:
           - version-update:semver-major
+      # Parâmetros criptográficos (interop com o oráculo): sem PRs automáticos.
+      - dependency-name: "scrypt"
+      - dependency-name: "rand"
+      - dependency-name: "aes-gcm"
+      - dependency-name: "sha2"
+      - dependency-name: "base64"
 
   - package-ecosystem: github-actions
     directory: "/"
