@@ -52,6 +52,7 @@ ssh ubuntu@136.248.83.112 \
 | Data | Node exit | Node saldo | Rust exit | Rust saldo | Check-in (Node/Rust) | Tarefas (Node/Rust) | Divergências |
 |---|---|---|---|---|---|---|---|
 | 2026-10-01 | 0 (12m23s) | 3321 (+91: check-in +40 / tarefas +51) | 0 (12m22s) | 1130 (+12: check-in +1 / tarefas +11) | Node: coletou próprio; Rust: `alreadyCollected=false` (coletou próprio) | Node: `Daily check-in +1`; Rust: 3 tarefas app-only desativadas, +11 | Nenhuma; ambos `exit=0`, sem travas |
+| 2026-10-02 | 0 | 3442 (+101: check-in +40 / tarefas +61) | 0 (32m38s) | 1207 (+32: check-in +1 / tarefas +31) | Rust: `alreadyCollected=false` (coletou próprio; streak 6) | Node: tudo concluído; Rust: Explore sponsored 2/2, recently viewed, recap, Super discounts **2/3**; surpresa falhou; **Search e Coupons ficaram pendentes** | ⚠️ Gaveta travou às 11:59 (2 reloads + `Falha persistente`); recuperação segurou, mas o fim da etapa perdeu 2 tarefas. Surpresa sem progresso (`tracking=62->0`) — bloqueio do host, igual ao oráculo |
 | 2026-10-02 | | | | | | | |
 | 2026-10-03 | | | | | | | |
 | 2026-10-04 | | | | | | | |
