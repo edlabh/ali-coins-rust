@@ -291,8 +291,8 @@ desktop, tanto no check-in quanto nas tarefas (como o oráculo):
 - **Auditoria bloqueante**: `cargo audit` sem `|| true` (0 vulnerabilidades; aviso
   de versão yanked apenas), com ferramenta pré-compilada via `taiki-e/install-action`.
 - **Cobertura**: job `coverage` com `cargo llvm-cov --workspace --summary-only` e
-  gate progressivo em **61%** — medido em 01/10: **61,74% de linhas** (14.473
-  linhas, 8.936 cobertas). Meta de 80% registrada como pendência: as maiores
+  gate progressivo em **62%** — medido em 06/10: **62,15% de linhas** (14.831
+  linhas, 9.218 cobertas; era 61,74% em 01/10). Meta de 80% registrada como pendência: as maiores
   lacunas são o glue de CLI (`run_all`/`run_checkin`/`run_tasks`, que dependem de
   browser real) e o CDP/tarefas DOM (smoke `#[ignore]`).
 - **SBOM**: job `sbom` gera CycloneDX JSON (`cargo cyclonedx --format json`) e
