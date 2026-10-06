@@ -290,6 +290,9 @@ desktop, tanto no check-in quanto nas tarefas (como o oráculo):
 
 - **Auditoria bloqueante**: `cargo audit` sem `|| true` (0 vulnerabilidades; aviso
   de versão yanked apenas), com ferramenta pré-compilada via `taiki-e/install-action`.
+- **`cargo deny` (06/10)**: job que roda `cargo deny check` (licenças em
+  `deny.toml`, bans de wildcard liberados para path deps internos via
+  `publish = false`, fontes restritas ao crates.io).
 - **Cobertura**: job `coverage` com `cargo llvm-cov --workspace --summary-only` e
   gate progressivo em **79%** — medido em 06/10: **80,02% de linhas** (16.580
   linhas, 13.267 cobertas; era 61,74% em 01/10). A partir de 06/10 os fluxos do

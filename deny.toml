@@ -1,0 +1,41 @@
+# Configuração do `cargo deny` (licenças, bans, fontes e avisos).
+# O job `audit` do CI segue bloqueante; este arquivo complementa com licenças.
+
+[graph]
+targets = []
+
+[advisories]
+version = 2
+# Avisos de segurança continuam bloqueando via `cargo audit` no CI.
+yanked = "warn"
+
+[licenses]
+version = 2
+# Licenças permitidas: todas as presentes na árvore atual (crates.io).
+allow = [
+    "MIT",
+    "MIT-0",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "ISC",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "Zlib",
+    "CC0-1.0",
+    "Unlicense",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "CDLA-Permissive-2.0",
+]
+confidence-threshold = 0.93
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+# Dependências internas do workspace usam `path` sem versão (não são publicadas).
+allow-wildcard-paths = true
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

@@ -4,6 +4,13 @@ on:
   push:
     tags:
       - "v*"
+  # Dry-run manual: compila os 4 alvos e guarda artefatos, sem criar release.
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Versão usada nos nomes dos artefatos (dry-run)"
+        required: false
+        default: "dry-run"
 
 permissions:
   contents: write
@@ -55,8 +62,14 @@ jobs:
 
       - name: Empacotar + checksum
         shell: bash
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          if [ -n "$INPUT_VERSION" ]; then
+            VERSION="$INPUT_VERSION"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
           ARCHIVE="ali-coins-rust-${VERSION}-${{ matrix.artifact }}.tar.gz"
           tar -C "target/${{ matrix.target }}/release" -czf "$ARCHIVE" "${{ matrix.binary }}"
           if command -v sha256sum >/dev/null 2>&1; then
@@ -67,7 +80,17 @@ jobs:
           fi
           echo "ARCHIVE=$ARCHIVE" >> "$GITHUB_ENV"
 
+      - name: Guardar artefatos (dry-run)
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            ali-coins-rust-*.tar.gz
+            ali-coins-rust-*.tar.gz.sha256
+
       - name: Publicar artefatos no release
+        if: github.event_name == 'push'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}

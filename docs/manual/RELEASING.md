@@ -30,6 +30,15 @@ Guia de versionamento, publicação e rollback do `ali-coins-rust`.
    - `ali-coins-rust-<versão>-macos-x86_64.tar.gz` (Intel)
    - `ali-coins-rust-<versão>-windows-x86_64.tar.gz` (`ali-coins.exe`)
 
+### Dry-run sem tag (validar o workflow)
+
+Para ensaiar a compilação multi-OS **sem** criar tag/release:
+
+1. GitHub → **Actions → release → Run workflow** (`workflow_dispatch`);
+2. informe a versão usada só nos nomes (padrão: `dry-run`);
+3. o workflow compila os 4 alvos e **guarda os tarballs como artefatos** — a
+   publicação no release só acontece em push de tag `v*`.
+
 ## Release manual (fallback)
 
 Se o workflow falhar, replique localmente:

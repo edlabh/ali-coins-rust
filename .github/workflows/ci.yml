@@ -59,6 +59,14 @@ jobs:
       - name: cargo audit
         run: cargo audit
 
+      - name: Instala cargo-deny
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny
+
+      - name: cargo deny (licenças/bans/fontes)
+        run: cargo deny check
+
       - name: Gitleaks (segredos no histórico)
         uses: gitleaks/gitleaks-action@v3
         env:

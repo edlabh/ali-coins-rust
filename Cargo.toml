@@ -12,6 +12,8 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"
 license = "ISC"
+# Crates internos (não publicados no crates.io; exigido pelo `cargo deny`).
+publish = false
 
 [workspace.dependencies]
 # Dependências externas são adicionadas nas fases 1+ conforme ADR-0002:
