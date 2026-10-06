@@ -470,6 +470,80 @@ mod tests {
     }
 
     #[test]
+    fn tasks_com_tarefa_resgatavel_retorna_sucesso() {
+        use ali_coins_browser::mock::{MockDriver, MockPageSpec};
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        std::fs::write(
+            dir.path().join("session.json"),
+            r#"{"cookies":[{"name":"xman_us_t","value":"abc"}]}"#,
+        )
+        .expect("sessão");
+        std::fs::write(
+            dir.path().join("session_meta.json"),
+            r#"{"user":"user@example.com"}"#,
+        )
+        .expect("meta");
+        let ctx = crate::context::context_from(
+            dir.path().to_path_buf(),
+            EnvSource::from_pairs([
+                ("ALI_USER", "user@example.com"),
+                ("ALI_PASSWORD", "senha"),
+                ("SESSION_SECRET", "0123456789abcdef0123456789abcdef"),
+                ("ENCRYPT_LOCAL_SESSION", "false"),
+                ("TELEGRAM_ENABLED", "false"),
+                ("NAV_TIMEOUT", "1200"),
+                ("NAV_TIMEOUT_SHORT", "800"),
+                ("ELEMENT_TIMEOUT", "300"),
+                ("SELECTOR_TIMEOUT", "300"),
+            ]),
+        )
+        .expect("contexto");
+        let task = serde_json::json!([{
+            "index": 0,
+            "title": "Tarefa A",
+            "desc": "",
+            "btnText": "COLLECT",
+            "btnStyle": "",
+            "statusText": "",
+            "completedRounds": null,
+            "currentRound": null,
+            "totalRounds": null,
+            "isDone": false,
+            "isActionable": false,
+            "isClaimable": true,
+            "groupId": "",
+            "coins": "+5 moedas",
+            "allText": "Tarefa A"
+        }]);
+        let mock = MockDriver::new(vec![MockPageSpec {
+            storage_state: Some(serde_json::json!({
+                "cookies": [{ "name": "xman_us_t", "value": "abc" }],
+                "origins": []
+            })),
+            visible_selectors: vec![".e2e_task".to_string(), ".e2e_normal_task".to_string()],
+            eval_contains: vec![
+                (
+                    "getBoundingClientRect().height > 100".to_string(),
+                    serde_json::json!(true),
+                ),
+                ("els.findIndex".to_string(), serde_json::json!(0)),
+                (
+                    "btn.click(); return true;".to_string(),
+                    serde_json::json!(true),
+                ),
+                (
+                    "document.querySelectorAll('.e2e_normal_task')".to_string(),
+                    task,
+                ),
+            ],
+            ..MockPageSpec::default()
+        }]);
+        let code = run_with_context(&["tasks".to_string(), "--json".to_string()], ctx, &mock);
+        assert_eq!(code, StdExitCode::from(0));
+    }
+
+    #[test]
     fn lock_ativo_retorna_exit_3() {
         let dir = tempfile::tempdir().expect("tempdir");
         let ctx = crate::context::context_from(

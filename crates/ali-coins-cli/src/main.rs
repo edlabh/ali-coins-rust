@@ -293,4 +293,47 @@ mod tests {
         let code = dispatch(&args(&["ali-coins", "--dry-run", "--json"]));
         assert_eq!(code, ExitCode::from(1));
     }
+
+    #[test]
+    fn dispatch_subcomandos_com_dry_run_retornam_1() {
+        for comando in ["all", "checkin", "tasks"] {
+            let code = dispatch(&args(&["ali-coins", comando, "--dry-run"]));
+            assert_eq!(code, ExitCode::from(1), "{comando}");
+        }
+    }
+
+    #[test]
+    fn dry_run_humano_cobre_ramificacoes() {
+        let env = EnvSource::from_pairs([
+            ("ALI_USER", "user@example.com"),
+            ("ALI_PASSWORD", "senha"),
+            ("SESSION_SECRET", "0123456789abcdef0123456789abcdef"),
+            ("TELEGRAM_ENABLED", "false"),
+            ("NAV_TIMEOUT", "45000"),
+            ("ALLOW_MEDIA", "true"),
+            ("HEADLESS", "false"),
+            ("CAPTCHA_COOLDOWN_HOURS", "6"),
+            ("NO_SANDBOX", "true"),
+            ("NOTIFY_WEBHOOK_URL", "https://example.com/hook"),
+            ("ALLOW_PRIVATE_WEBHOOKS", "true"),
+        ]);
+        let dir = tempfile::tempdir().expect("tempdir");
+        let config = Config::load(&env, dir.path(), true, None, None).expect("config");
+        let contas = vec![
+            ali_coins_core::config::Account {
+                index: 0,
+                user: "a@example.com".to_string(),
+                masked_user: "a***".to_string(),
+                ..ali_coins_core::config::Account::default()
+            },
+            ali_coins_core::config::Account {
+                index: 1,
+                user: "b@example.com".to_string(),
+                masked_user: "b***".to_string(),
+                ..ali_coins_core::config::Account::default()
+            },
+        ];
+        print_human_dry_run(&config, &contas);
+        print_human_dry_run(&config, &[]);
+    }
 }

@@ -626,6 +626,175 @@ mod tests {
     }
 
     #[test]
+    fn rotate_sem_sessao_falha() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let ctx = crate::context::context_from(
+            dir.path().to_path_buf(),
+            EnvSource::from_pairs([
+                ("ALI_USER", USER),
+                ("ALI_PASSWORD", "senha"),
+                ("SESSION_SECRET", SECRET),
+                ("SESSION_SECRET_NEW", "novo-secret-0123456789abcdef-xyz"),
+                ("TELEGRAM_ENABLED", "false"),
+            ]),
+        )
+        .expect("contexto");
+        let code = run_rotate_with_context(
+            &[
+                "--rotate".to_string(),
+                "--new-secret-from-env=SESSION_SECRET_NEW".to_string(),
+            ],
+            ctx,
+        );
+        assert_ne!(code, ExitCode::SUCCESS);
+    }
+
+    #[test]
+    fn migrate_sem_legado_falha() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let ctx = crate::context::context_from(
+            dir.path().to_path_buf(),
+            EnvSource::from_pairs([
+                ("ALI_USER", USER),
+                ("ALI_PASSWORD", "senha"),
+                ("SESSION_SECRET", SECRET),
+                ("ENCRYPT_LOCAL_SESSION", "true"),
+                ("TELEGRAM_ENABLED", "false"),
+            ]),
+        )
+        .expect("contexto");
+        let code = run_migrate_with_context(&["--migrate".to_string(), "--json".to_string()], ctx);
+        assert_ne!(code, ExitCode::SUCCESS);
+    }
+
+    #[test]
+    fn resolve_account_por_indice_e_usuario() {
+        use ali_coins_core::config::Account;
+        let accounts = vec![
+            Account {
+                index: 0,
+                user: "a@example.com".to_string(),
+                masked_user: "a".to_string(),
+                ..Account::default()
+            },
+            Account {
+                index: 1,
+                user: "b@example.com".to_string(),
+                masked_user: "b".to_string(),
+                ..Account::default()
+            },
+        ];
+        assert_eq!(
+            resolve_account(&accounts, "1").map(|conta| conta.index),
+            Some(1)
+        );
+        assert_eq!(
+            resolve_account(&accounts, "B@example.com").map(|conta| conta.index),
+            Some(1)
+        );
+        assert!(resolve_account(&accounts, "zzz@example.com").is_none());
+    }
+
+    #[test]
+    fn selected_accounts_filtra_por_selector() {
+        use ali_coins_core::config::Account;
+        let accounts = vec![
+            Account {
+                index: 0,
+                user: "a@example.com".to_string(),
+                masked_user: "a".to_string(),
+                ..Account::default()
+            },
+            Account {
+                index: 1,
+                user: "b@example.com".to_string(),
+                masked_user: "b".to_string(),
+                ..Account::default()
+            },
+        ];
+        assert_eq!(selected_accounts(&[], &accounts).expect("todas").len(), 2);
+        let uma =
+            selected_accounts(&["--account".to_string(), "1".to_string()], &accounts).expect("uma");
+        assert_eq!(uma[0].index, 1);
+        let erro =
+            selected_accounts(&["--account".to_string(), "9".to_string()], &accounts).unwrap_err();
+        assert_eq!(erro, ExitCode::from(1));
+    }
+
+    #[test]
+    fn rotate_com_secret_antigo() {
+        const NOVO: &str = "novo-secret-0123456789abcdef-xyz";
+        let dir = tempfile::tempdir().expect("tempdir");
+        grava_sessao(dir.path());
+        let ctx = crate::context::context_from(
+            dir.path().to_path_buf(),
+            EnvSource::from_pairs([
+                ("ALI_USER", USER),
+                ("ALI_PASSWORD", "senha"),
+                ("SESSION_SECRET", SECRET),
+                ("SESSION_SECRET_OLD", SECRET),
+                ("SESSION_SECRET_NEW", NOVO),
+                ("TELEGRAM_ENABLED", "false"),
+            ]),
+        )
+        .expect("contexto");
+        let code = run_rotate_with_context(
+            &[
+                "--rotate".to_string(),
+                "--new-secret-from-env=SESSION_SECRET_NEW".to_string(),
+            ],
+            ctx,
+        );
+        assert_eq!(code, ExitCode::SUCCESS);
+    }
+
+    #[test]
+    fn rotate_com_secret_errado_falha() {
+        const NOVO: &str = "novo-secret-0123456789abcdef-xyz";
+        let dir = tempfile::tempdir().expect("tempdir");
+        grava_sessao(dir.path());
+        let ctx = crate::context::context_from(
+            dir.path().to_path_buf(),
+            EnvSource::from_pairs([
+                ("ALI_USER", USER),
+                ("ALI_PASSWORD", "senha"),
+                ("SESSION_SECRET", SECRET),
+                ("SESSION_SECRET_OLD", "secret-errado-000000000000000000"),
+                ("SESSION_SECRET_NEW", NOVO),
+                ("TELEGRAM_ENABLED", "false"),
+            ]),
+        )
+        .expect("contexto");
+        let code = run_rotate_with_context(
+            &[
+                "--rotate".to_string(),
+                "--new-secret-from-env=SESSION_SECRET_NEW".to_string(),
+            ],
+            ctx,
+        );
+        assert_ne!(code, ExitCode::SUCCESS);
+    }
+
+    #[test]
+    fn migrate_com_legado_invalido_falha() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        std::fs::write(dir.path().join("session.json"), b"nao-e-json").expect("legado");
+        let ctx = crate::context::context_from(
+            dir.path().to_path_buf(),
+            EnvSource::from_pairs([
+                ("ALI_USER", USER),
+                ("ALI_PASSWORD", "senha"),
+                ("SESSION_SECRET", SECRET),
+                ("ENCRYPT_LOCAL_SESSION", "true"),
+                ("TELEGRAM_ENABLED", "false"),
+            ]),
+        )
+        .expect("contexto");
+        let code = run_migrate_with_context(&["--migrate".to_string(), "--json".to_string()], ctx);
+        assert_ne!(code, ExitCode::SUCCESS);
+    }
+
+    #[test]
     fn import_token_invalido_falha() {
         let dir = tempfile::tempdir().expect("tempdir");
         let bad = dir.path().join("bad.txt");

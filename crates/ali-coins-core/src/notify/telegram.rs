@@ -1516,4 +1516,59 @@ mod tests {
         ));
         assert!(com_aviso.contains("<code>node export_session.js</code>"));
     }
+
+    #[test]
+    fn trunca_em_entidade_sem_ponto_e_virgula() {
+        let texto = format!("{}&amp\n{}", "x".repeat(2500), "y".repeat(2000));
+        let saida = truncate_telegram_message(&texto);
+        assert!(saida.ends_with("… (mensagem truncada)"));
+        assert!(
+            !saida
+                .trim_end_matches("… (mensagem truncada)")
+                .ends_with('&'),
+            "entidade incompleta deve ser removida: {saida}"
+        );
+    }
+
+    #[test]
+    fn extrai_erro_relevante_cobre_ramificacoes() {
+        const UNKNOWN: &str = "Erro desconhecido durante o processamento.";
+        assert_eq!(extract_relevant_error_message(None), UNKNOWN);
+        assert_eq!(extract_relevant_error_message(Some("   ")), UNKNOWN);
+        let logs = "Falha ao abrir a página\nSegunda linha útil\n===== logs =====\nruído interno";
+        assert_eq!(
+            extract_relevant_error_message(Some(logs)),
+            "Falha ao abrir a página\nSegunda linha útil"
+        );
+        let call = "Timeout ao carregar\nCall log:\n - waiting for selector";
+        assert_eq!(
+            extract_relevant_error_message(Some(call)),
+            "Timeout ao carregar"
+        );
+        let multi = "linha neutra\n    at foo (bar:1)\n  - [pid=123] nada\nerror: algo falhou\nfatal: crashou\noutra linha\nmais uma";
+        let extraido = extract_relevant_error_message(Some(multi));
+        assert!(extraido.contains("error: algo falhou"));
+        assert!(extraido.contains("fatal: crashou"));
+        assert!(!extraido.contains("at foo"));
+        // Nenhuma linha com indicador: usa as 3 primeiras relevantes.
+        assert_eq!(
+            extract_relevant_error_message(Some("a\nb\nc\nd")),
+            "a\nb\nc"
+        );
+        // Todas irrelevantes: devolve as 3 primeiras linhas cruas.
+        assert_eq!(
+            extract_relevant_error_message(Some("at a\nat b\nat c\nat d")),
+            "at a\nat b\nat c"
+        );
+    }
+
+    #[test]
+    fn streak_segura_e_nomes_de_evento() {
+        assert_eq!(to_safe_streak(Some("5")), "5 dias");
+        assert_eq!(to_safe_streak(Some("0")), "N/D");
+        assert_eq!(to_safe_streak(Some("abc")), "N/D");
+        assert_eq!(to_safe_streak(None), "N/D");
+        assert_eq!(event_name(TelegramEvent::DryRun), "dry_run");
+        assert_eq!(event_name(TelegramEvent::ManualTest), "manual_test");
+    }
 }

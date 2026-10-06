@@ -771,6 +771,38 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn runner_tarefas_concluidas_nao_executam() {
+        let mut done = task_json("Tarefa concluída", "DONE", None);
+        done["isDone"] = json!(true);
+        let tasks = json!([done]);
+        let driver = MockDriver::new(vec![MockPageSpec {
+            visible_selectors: vec![".e2e_task".to_string()],
+            eval_contains: vec![
+                (
+                    "getBoundingClientRect().height > 100".to_string(),
+                    json!(true),
+                ),
+                (
+                    "document.querySelectorAll('.e2e_normal_task')".to_string(),
+                    tasks,
+                ),
+            ],
+            ..MockPageSpec::default()
+        }]);
+        let browser = driver.launch(&LaunchOptions::default()).await.unwrap();
+        let page = browser.new_page().await.unwrap();
+        let options = TasksOptions {
+            max_actions: 3,
+            open_drawer_timeout: Duration::from_millis(200),
+            ..TasksOptions::default()
+        };
+        let run = run_tasks(&*page, &*browser, &options)
+            .await
+            .expect("runner");
+        assert_eq!(run.actions, 0);
+    }
+
+    #[tokio::test]
     async fn runner_sem_tarefas_encerra_sem_acoes() {
         let driver = MockDriver::new(vec![MockPageSpec {
             visible_selectors: vec![".e2e_task".to_string()],

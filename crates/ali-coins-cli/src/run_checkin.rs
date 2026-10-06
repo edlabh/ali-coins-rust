@@ -593,6 +593,18 @@ mod tests {
     }
 
     #[test]
+    fn falha_de_io_no_lock_retorna_exit_1() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let ctx = ctx_teste(dir.path());
+        let lock = ctx.accounts[0].lock_path.clone();
+        let parent = lock.parent().expect("pai do lock").to_path_buf();
+        let _ = std::fs::remove_dir_all(&parent);
+        std::fs::write(&parent, "arquivo no lugar do diretório").expect("arquivo");
+        let code = run_with_context(&["checkin".to_string()], ctx, &MockDriver::new(vec![]));
+        assert_eq!(code, StdExitCode::from(1));
+    }
+
+    #[test]
     fn falha_de_navegacao_retorna_exit_1() {
         let dir = tempfile::tempdir().expect("tempdir");
         let ctx = ctx_teste(dir.path());

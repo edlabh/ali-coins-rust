@@ -612,6 +612,22 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn surpresa_sem_cards_encerra_sem_toques() {
+        use ali_coins_browser::driver::BrowserDriver as _;
+        use ali_coins_browser::mock::{MockDriver, MockPageSpec};
+
+        let driver = MockDriver::new(vec![MockPageSpec::default()]);
+        let browser = driver
+            .launch(&ali_coins_browser::driver::LaunchOptions::default())
+            .await
+            .expect("launch");
+        let page = browser.new_page().await.expect("página");
+        let mut touched = std::collections::HashSet::new();
+        let clicked = execute_surprise_items(None, &*page, 0, &mut touched).await;
+        assert_eq!(clicked, 0);
+    }
+
+    #[tokio::test]
     async fn fluxo_surpresa_para_sem_progresso() {
         use ali_coins_browser::driver::BrowserDriver as _;
         use ali_coins_browser::mock::{MockDriver, MockPageSpec};

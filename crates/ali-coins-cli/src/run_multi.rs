@@ -608,6 +608,19 @@ mod tests {
     }
 
     #[test]
+    fn flags_detectam_captcha() {
+        let captcha = vec![execution(
+            "user1",
+            1,
+            Some("captcha required pela AliExpress"),
+        )];
+        let flags = MultiFlags::from_executions(&captcha);
+        assert!(flags.any_captcha);
+        assert_eq!(flags.event(), TelegramEvent::CaptchaRequired);
+        assert_eq!(flags.exit_code(), ExitCode::Failure);
+    }
+
+    #[test]
     fn executa_contas_em_sequencia_com_runner_fake() {
         let env = EnvSource::from_pairs([("ACCOUNT_BACKOFF_BASE_MS", "0")]);
         let accounts: Vec<Account> = ["a@example.com", "b@example.com", "c@example.com"]
@@ -687,6 +700,10 @@ mod tests {
         let end = json_object_end(text, start).expect("fim");
         assert_eq!(&text[start..end], r#"{"a": "} dentro", "b": {"c": 1}}"#);
         assert!(json_object_end("sem chaves", 0).is_none());
+        let escapado = r#"{"a": "x\"}y", "b": 1} cauda"#;
+        let inicio = escapado.find('{').expect("abre chave");
+        let fim = json_object_end(escapado, inicio).expect("fim com escape");
+        assert_eq!(&escapado[inicio..fim], r#"{"a": "x\"}y", "b": 1}"#);
     }
 
     #[test]

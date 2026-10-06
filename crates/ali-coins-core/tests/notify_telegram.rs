@@ -71,6 +71,15 @@ fn route(path: &str, hit: usize) -> (&'static str, String) {
             "400 Bad Request",
             "{\"ok\":false,\"description\":\"can't parse entities\"}".to_string(),
         )
+    } else if path.contains("throttled") {
+        if hit == 1 {
+            (
+                "429 Too Many Requests",
+                "{\"ok\":false,\"parameters\":{\"retry_after\":0.001}}".to_string(),
+            )
+        } else {
+            ("200 OK", "{\"ok\":true}".to_string())
+        }
     } else if path.contains("slow") {
         std::thread::sleep(Duration::from_millis(300));
         ("200 OK", "{\"ok\":true}".to_string())
@@ -105,6 +114,25 @@ async fn retenta_5xx_e_entrega() {
             .unwrap()
             .get("/botflaky/sendMessage"),
         Some(&2)
+    );
+}
+
+#[tokio::test]
+async fn respeita_retry_after_em_429() {
+    let (port, counters) = start_server();
+    let client = SafeHttpClient::new(true, Duration::from_secs(5)).expect("cliente");
+    let config = telegram_config(port, "throttled");
+    let result = send_telegram(&client, &config, "oi").await;
+    assert!(result.ok, "{result:?}");
+    assert_eq!(result.status, Some(200));
+    assert_eq!(
+        counters
+            .by_path
+            .lock()
+            .unwrap()
+            .get("/botthrottled/sendMessage"),
+        Some(&2),
+        "deve reenviar após 429"
     );
 }
 

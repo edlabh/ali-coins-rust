@@ -691,6 +691,73 @@ mod tests {
     use super::*;
     use ali_coins_browser::driver::{BrowserDriver as _, LaunchOptions};
     use ali_coins_browser::mock::{MockDriver, MockPageSpec};
+    use serde_json::json;
+
+    #[tokio::test]
+    async fn extracao_sem_itens_retorna_vazio() {
+        let driver = MockDriver::new(vec![MockPageSpec::default()]);
+        let browser = driver
+            .launch(&LaunchOptions::default())
+            .await
+            .expect("launch");
+        let page = browser.new_page().await.expect("página");
+        let tarefas = extract_tasks_from_drawer(&*page).await.expect("extração");
+        assert_eq!(tarefas.len(), 0, "extração sem itens deve ser vazia");
+    }
+
+    #[tokio::test]
+    async fn extracao_e_clique_usam_indice_e_botao() {
+        let item = json!([{
+            "index": 0,
+            "title": "Tarefa A",
+            "desc": "",
+            "btnText": "COLLECT",
+            "btnStyle": "",
+            "statusText": "",
+            "completedRounds": null,
+            "currentRound": null,
+            "totalRounds": null,
+            "isDone": false,
+            "isActionable": false,
+            "isClaimable": true,
+            "groupId": "",
+            "coins": "+5 moedas",
+            "allText": "Tarefa A"
+        }]);
+        let driver = MockDriver::new(vec![MockPageSpec {
+            eval_contains: vec![
+                ("els.findIndex".to_string(), json!(0)),
+                ("btn.click(); return true;".to_string(), json!(true)),
+                (
+                    "document.querySelectorAll('.e2e_normal_task')".to_string(),
+                    item,
+                ),
+            ],
+            ..MockPageSpec::default()
+        }]);
+        let browser = driver
+            .launch(&LaunchOptions::default())
+            .await
+            .expect("launch");
+        let page = browser.new_page().await.expect("página");
+        let tarefas = extract_tasks_from_drawer(&*page).await.expect("extração");
+        assert_eq!(tarefas.len(), 1);
+        assert_eq!(tarefas[0].title, "Tarefa A");
+        assert_eq!(find_task_index_by_title(&*page, "Tarefa A").await, Some(0));
+        assert!(click_task_button(&*page, "Tarefa A").await);
+    }
+
+    #[tokio::test]
+    async fn clique_sem_indice_retorna_false() {
+        let driver = MockDriver::new(vec![MockPageSpec::default()]);
+        let browser = driver
+            .launch(&LaunchOptions::default())
+            .await
+            .expect("launch");
+        let page = browser.new_page().await.expect("página");
+        assert_eq!(find_task_index_by_title(&*page, "Inexistente").await, None);
+        assert!(!click_task_button(&*page, "Inexistente").await);
+    }
 
     #[tokio::test]
     async fn gaveta_sem_botao_retorna_false() {
