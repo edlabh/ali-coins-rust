@@ -611,6 +611,43 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn fluxo_surpresa_para_sem_progresso() {
+        use ali_coins_browser::driver::BrowserDriver as _;
+        use ali_coins_browser::mock::{MockDriver, MockPageSpec};
+
+        let cards = serde_json::json!([
+            { "dataId": "card-0", "signature": "card-0" },
+            { "dataId": "card-1", "signature": "card-1" }
+        ]);
+        let driver = MockDriver::new(vec![MockPageSpec {
+            visible_selectors: vec![".feeds-discount-card".to_string()],
+            eval_contains: vec![
+                (
+                    "document.querySelectorAll('.feeds-discount-card')".to_string(),
+                    cards,
+                ),
+                (
+                    "el.scrollIntoView".to_string(),
+                    serde_json::json!("{\"x\":100,\"y\":200,\"inside\":true}"),
+                ),
+                (
+                    "performance.getEntriesByType('resource')".to_string(),
+                    serde_json::json!(5),
+                ),
+            ],
+            ..MockPageSpec::default()
+        }]);
+        let browser = driver
+            .launch(&ali_coins_browser::driver::LaunchOptions::default())
+            .await
+            .expect("launch");
+        let page = browser.new_page().await.expect("page");
+        let mut touched = std::collections::HashSet::new();
+        let clicked = execute_surprise_items(Some(&*browser), &*page, 0, &mut touched).await;
+        assert_eq!(clicked, 2, "deve parar após 2 toques sem progresso");
+    }
+
     #[test]
     fn compara_feed_por_url_normalizada() {
         let feed = "https://m.aliexpress.com/p/coin-index/feed.html?_immersiveMode=true&spm=abc";
