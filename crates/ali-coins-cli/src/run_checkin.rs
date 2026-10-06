@@ -573,6 +573,26 @@ mod tests {
     }
 
     #[test]
+    fn ja_coletado_retorna_exit_2() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let ctx = ctx_teste(dir.path());
+        let mock = MockDriver::new(vec![MockPageSpec {
+            storage_state: Some(serde_json::json!({
+                "cookies": [{ "name": "xman_us_t", "value": "abc" }],
+                "origins": []
+            })),
+            visible_selectors: vec!["[class*=\"today-checked\"]".to_string()],
+            eval_contains: vec![(
+                "document.body ? document.body.innerText".to_string(),
+                serde_json::json!("Minhas moedas 1.234 Sequência de 42 dias"),
+            )],
+            ..MockPageSpec::default()
+        }]);
+        let code = run_with_context(&["checkin".to_string(), "--json".to_string()], ctx, &mock);
+        assert_eq!(code, StdExitCode::from(2));
+    }
+
+    #[test]
     fn falha_de_navegacao_retorna_exit_1() {
         let dir = tempfile::tempdir().expect("tempdir");
         let ctx = ctx_teste(dir.path());
