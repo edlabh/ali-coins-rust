@@ -244,4 +244,20 @@ mod tests {
         assert!(bytes.len() < WEBHOOK_MAX_PAYLOAD_BYTES);
         assert!(String::from_utf8_lossy(&bytes).contains("truncated"));
     }
+
+    #[tokio::test]
+    async fn tracker_de_webhooks_registra_e_esvazia() {
+        let tracker = WebhookTracker::new();
+        assert_eq!(tracker.pending(), 0);
+        tracker.track(tokio::spawn(async {}));
+        tokio::task::yield_now().await;
+        assert_eq!(tracker.pending(), 0);
+        tracker.track(tokio::spawn(async {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }));
+        assert_eq!(tracker.pending(), 1);
+        tracker.flush(Duration::from_millis(500)).await;
+        assert_eq!(tracker.pending(), 0);
+        tracker.flush(Duration::from_millis(1)).await;
+    }
 }

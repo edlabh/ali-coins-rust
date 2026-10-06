@@ -687,6 +687,85 @@ mod tests {
     }
 
     #[test]
+    fn log_level_parse_e_as_str_cobrem_variantes() {
+        for value in LogLevel::VALUES {
+            let level = LogLevel::parse(value).expect("nível válido");
+            assert_eq!(level.as_str(), value);
+        }
+        assert!(LogLevel::parse("barulhento").is_none());
+    }
+
+    #[test]
+    fn log_level_invalido_gera_erro() {
+        let env = env_with(&[
+            ("ALI_USER", "user@example.com"),
+            ("ALI_PASSWORD", "senha"),
+            ("SESSION_SECRET", "0123456789abcdef0123456789abcdef"),
+            ("LOG_LEVEL", "invalido"),
+        ]);
+        let err = Config::load(&env, Path::new("/tmp"), true, None, None).unwrap_err();
+        let paths: Vec<&str> = err
+            .issues()
+            .iter()
+            .map(|issue| issue.path.as_str())
+            .collect();
+        assert!(paths.contains(&"LOG_LEVEL"), "{paths:?}");
+    }
+
+    #[test]
+    fn delays_invertidos_geram_erros() {
+        let env = env_with(&[
+            ("ALI_USER", "user@example.com"),
+            ("ALI_PASSWORD", "senha"),
+            ("SESSION_SECRET", "0123456789abcdef0123456789abcdef"),
+            ("ACCOUNT_DELAY_MIN_MS", "500"),
+            ("ACCOUNT_DELAY_MAX_MS", "100"),
+            ("TASK_PAUSE_MIN_MS", "500"),
+            ("TASK_PAUSE_MAX_MS", "100"),
+            ("START_DELAY_MIN_MS", "500"),
+            ("START_DELAY_MAX_MS", "100"),
+        ]);
+        let err = Config::load(&env, Path::new("/tmp"), true, None, None).unwrap_err();
+        let paths: Vec<&str> = err
+            .issues()
+            .iter()
+            .map(|issue| issue.path.as_str())
+            .collect();
+        assert!(paths.contains(&"ACCOUNT_DELAY_MAX_MS"), "{paths:?}");
+        assert!(paths.contains(&"TASK_PAUSE_MAX_MS"), "{paths:?}");
+        assert!(paths.contains(&"START_DELAY_MAX_MS"), "{paths:?}");
+    }
+
+    #[test]
+    fn usuario_e_senha_vazios_geram_erros_no_dry_run() {
+        let env = env_with(&[
+            ("ALI_USER", ""),
+            ("ALI_PASSWORD", ""),
+            ("SESSION_SECRET", "0123456789abcdef0123456789abcdef"),
+        ]);
+        let err = Config::load(&env, Path::new("/tmp"), true, None, None).unwrap_err();
+        let paths: Vec<&str> = err
+            .issues()
+            .iter()
+            .map(|issue| issue.path.as_str())
+            .collect();
+        assert!(paths.contains(&"ALI_USER"), "{paths:?}");
+        assert!(paths.contains(&"ALI_PASSWORD"), "{paths:?}");
+    }
+
+    #[test]
+    fn sem_dry_run_usuario_e_senha_vazios_viram_placeholders() {
+        let env = env_with(&[
+            ("ALI_USER", ""),
+            ("ALI_PASSWORD", ""),
+            ("SESSION_SECRET", "0123456789abcdef0123456789abcdef"),
+        ]);
+        let config = Config::load(&env, Path::new("/tmp"), false, None, None).expect("carga");
+        assert_eq!(config.ali_user, "placeholder@ali.local");
+        assert_eq!(config.ali_password, "placeholder_password");
+    }
+
+    #[test]
     fn session_secret_obrigatorio_com_criptografia() {
         let env = env_with(&[("ALI_USER", "u@e.com"), ("ALI_PASSWORD", "p")]);
         let err = Config::load(&env, Path::new("/tmp"), true, None, None).unwrap_err();

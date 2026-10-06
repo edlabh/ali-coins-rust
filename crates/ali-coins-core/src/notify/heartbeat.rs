@@ -277,4 +277,38 @@ mod tests {
             MAX_FAIL_BODY_CHARS
         );
     }
+
+    #[test]
+    fn mascara_url_e_corpo_de_acao() {
+        assert_eq!(mask_heartbeat_url("não é url"), "***");
+        let mascarada = mask_heartbeat_url(
+            "https://user:senha@heartbeat.example.com/api/abcdefghijkl/start?token=segredo&x=1#frag",
+        );
+        assert!(mascarada.contains("abcd***ijkl"), "{mascarada}");
+        assert!(!mascarada.contains("senha"));
+        assert!(!mascarada.contains("segredo"));
+        assert!(!mascarada.contains('#'));
+        let longo = build_action_body(HeartbeatAction::Success, "host", Some(&"x".repeat(40_000)));
+        assert!(longo.contains("[resumo: payload acima de 32KB]"));
+        assert_eq!(
+            build_action_body(HeartbeatAction::Success, "host", Some("ok")),
+            "ok"
+        );
+        assert_eq!(
+            build_action_body(HeartbeatAction::Start, "host", None),
+            "AliExpress Coins job started"
+        );
+        let falha = build_action_body(HeartbeatAction::Fail, "host", Some("erro"));
+        assert!(falha.contains("erro"), "{falha}");
+    }
+
+    #[test]
+    fn resultado_de_falha_e_skipped() {
+        let resultado = HeartbeatResult::failure("deu ruim");
+        assert!(!resultado.ok);
+        assert!(!resultado.skipped);
+        assert_eq!(resultado.status, None);
+        assert_eq!(resultado.error.as_deref(), Some("deu ruim"));
+        assert!(HeartbeatResult::skipped().skipped);
+    }
 }

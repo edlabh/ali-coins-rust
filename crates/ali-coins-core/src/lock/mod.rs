@@ -981,4 +981,19 @@ mod tests {
         }
         let _guard2 = acquire(&options).expect("readquiriu após drop");
     }
+
+    #[test]
+    fn is_io_error_distingue_transitorio() {
+        let transitorio = LockError::Active {
+            message: "x".to_string(),
+            io_error: true,
+        };
+        assert!(transitorio.is_io_error());
+        let ativo = LockError::Active {
+            message: "x".to_string(),
+            io_error: false,
+        };
+        assert!(!ativo.is_io_error());
+        assert!(!LockError::Other("x".to_string()).is_io_error());
+    }
 }

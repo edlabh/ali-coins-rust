@@ -140,4 +140,22 @@ mod tests {
             .collect();
         assert!(leftovers.is_empty(), "temporários: {leftovers:?}");
     }
+
+    #[test]
+    fn prepara_diretorio_de_dump_com_modo_restrito() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let alvo = dir.path().join("nivel1").join("nivel2");
+        prepare_output_dir_for_dump(&alvo).expect("cria diretório");
+        assert!(alvo.is_dir());
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+            let modo = std::fs::metadata(&alvo)
+                .expect("metadata")
+                .permissions()
+                .mode()
+                & 0o777;
+            assert_eq!(modo, 0o700);
+        }
+    }
 }
