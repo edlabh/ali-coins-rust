@@ -771,6 +771,73 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn runner_sem_tarefas_encerra_sem_acoes() {
+        let driver = MockDriver::new(vec![MockPageSpec {
+            visible_selectors: vec![".e2e_task".to_string()],
+            eval_contains: vec![
+                (
+                    "getBoundingClientRect().height > 100".to_string(),
+                    json!(true),
+                ),
+                (
+                    "document.querySelectorAll('.e2e_normal_task')".to_string(),
+                    json!([]),
+                ),
+            ],
+            ..MockPageSpec::default()
+        }]);
+        let browser = driver.launch(&LaunchOptions::default()).await.unwrap();
+        let page = browser.new_page().await.unwrap();
+        let options = TasksOptions {
+            max_actions: 3,
+            open_drawer_timeout: Duration::from_millis(200),
+            ..TasksOptions::default()
+        };
+        let run = run_tasks(&*page, &*browser, &options)
+            .await
+            .expect("runner");
+        assert_eq!(run.actions, 0);
+    }
+
+    #[tokio::test]
+    async fn runner_executa_com_pausa_configurada() {
+        let tasks = json!([task_json("Tarefa A", "COLLECT", None)]);
+        let driver = MockDriver::new(vec![MockPageSpec {
+            visible_selectors: vec![".e2e_task".to_string()],
+            eval_contains: vec![
+                (
+                    "getBoundingClientRect().height > 100".to_string(),
+                    json!(true),
+                ),
+                ("els.findIndex".to_string(), json!(0)),
+                ("btn.click(); return true;".to_string(), json!(true)),
+                (
+                    "document.querySelectorAll('.e2e_normal_task')".to_string(),
+                    tasks,
+                ),
+            ],
+            ..MockPageSpec::default()
+        }]);
+        let browser = driver.launch(&LaunchOptions::default()).await.unwrap();
+        let page = browser.new_page().await.unwrap();
+        let options = TasksOptions {
+            max_actions: 3,
+            max_attempts: 2,
+            open_drawer_timeout: Duration::from_millis(200),
+            pause_min: Duration::from_millis(1),
+            pause_max: Duration::from_millis(2),
+            ..TasksOptions::default()
+        };
+        let run = run_tasks(&*page, &*browser, &options)
+            .await
+            .expect("runner");
+        assert!(
+            run.actions >= 1,
+            "pausa configurada não deve impedir a ação"
+        );
+    }
+
+    #[tokio::test]
     async fn runner_respeita_teto_de_acoes() {
         let tasks = json!([
             task_json("Tarefa A", "COLLECT", None),

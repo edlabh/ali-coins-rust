@@ -619,6 +619,35 @@ pub async fn eval_typed<T: DeserializeOwned>(
 }
 
 #[cfg(test)]
+mod config_tests {
+    use super::*;
+
+    #[test]
+    fn build_config_cobre_flags_pares_env_e_perfis() {
+        let base = LaunchOptions {
+            headless: true,
+            args: vec![
+                "--no-sandbox".to_string(),
+                "--user-agent=Pixel 7".to_string(),
+                "--disable-gpu".to_string(),
+            ],
+            executable_path: Some(std::path::PathBuf::from("/x/chrome")),
+            user_data_dir: Some(std::path::PathBuf::from("/tmp/perfil")),
+            env: vec![("NO_SANDBOX".to_string(), "true".to_string())],
+        };
+        CdpDriver::build_config(&base).expect("config headless");
+        let visible = LaunchOptions {
+            headless: false,
+            args: Vec::new(),
+            executable_path: Some(std::path::PathBuf::from("/x/chrome")),
+            user_data_dir: None,
+            env: Vec::new(),
+        };
+        CdpDriver::build_config(&visible).expect("config visível");
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::parse_chromium_arg;
 

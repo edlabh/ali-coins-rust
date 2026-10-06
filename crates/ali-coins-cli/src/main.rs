@@ -71,34 +71,38 @@ fn last_boolean_flag(args: &[String], positive: &str, negative: &str) -> Option<
 
 fn main() -> ExitCode {
     let raw: Vec<String> = std::env::args().collect();
+    dispatch(&raw)
+}
 
+/// Despacho dos subcomandos (separado para testes sem depender de `argv`).
+fn dispatch(raw: &[String]) -> ExitCode {
     // Subcomandos de sessão (compatíveis com os scripts do oráculo).
     match raw.get(1).map(String::as_str) {
         Some("export-session") => return export_import::run_export(&raw[2..]),
         Some("import-session") => return export_import::run_import(&raw[2..]),
         Some("all") => {
             if raw.iter().any(|arg| arg == "--dry-run") {
-                return run_dry_run(&raw, raw.iter().any(|arg| arg == "--json"));
+                return run_dry_run(raw, raw.iter().any(|arg| arg == "--json"));
             }
             return run_all::run(&raw[2..]);
         }
         Some("checkin") => {
             if raw.iter().any(|arg| arg == "--dry-run") {
-                return run_dry_run(&raw, raw.iter().any(|arg| arg == "--json"));
+                return run_dry_run(raw, raw.iter().any(|arg| arg == "--json"));
             }
             return run_checkin::run(&raw[2..]);
         }
         Some("notify-test") => return notify_test::run(&raw[2..]),
         Some("tasks") => {
             if raw.iter().any(|arg| arg == "--dry-run") {
-                return run_dry_run(&raw, raw.iter().any(|arg| arg == "--json"));
+                return run_dry_run(raw, raw.iter().any(|arg| arg == "--json"));
             }
             return run_tasks::run(&raw[2..]);
         }
         _ => {}
     }
 
-    let matches = command().get_matches_from(&raw);
+    let matches = command().get_matches_from(raw.iter().map(String::as_str));
     let json_mode = matches.get_flag("json");
 
     // Crash handler global: exit code 6 com cleanup best-effort.
@@ -112,7 +116,7 @@ fn main() -> ExitCode {
         return ExitCode::from(1);
     }
 
-    run_dry_run(&raw, json_mode)
+    run_dry_run(raw, json_mode)
 }
 
 /// `--dry-run [--json]` (também aceito após subcomandos: `all --dry-run`).
@@ -234,4 +238,59 @@ fn print_human_dry_run(config: &Config, accounts: &[ali_coins_core::config::Acco
         }
     );
     println!("===============================================================");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn args(items: &[&str]) -> Vec<String> {
+        items.iter().map(|item| (*item).to_string()).collect()
+    }
+
+    #[test]
+    fn ultimo_booleano_vence() {
+        assert_eq!(
+            last_boolean_flag(
+                &args(&["--notify", "--no-notify"]),
+                "--notify",
+                "--no-notify"
+            ),
+            Some(false)
+        );
+        assert_eq!(
+            last_boolean_flag(&args(&[]), "--notify", "--no-notify"),
+            None
+        );
+    }
+
+    #[test]
+    fn dispatch_desconhecido_sem_dry_run_retorna_1() {
+        assert_eq!(
+            dispatch(&args(&["ali-coins", "comando-x"])),
+            ExitCode::from(1)
+        );
+    }
+
+    #[test]
+    fn dispatch_sem_credenciais_retorna_1() {
+        // O cwd dos testes não tem credentials.env: o bootstrap falha e os
+        // subcomandos encerram com código 1 pelo caminho normal.
+        for comando in [
+            "export-session",
+            "import-session",
+            "checkin",
+            "tasks",
+            "all",
+        ] {
+            let code = dispatch(&args(&["ali-coins", comando]));
+            assert_eq!(code, ExitCode::from(1), "{comando}");
+        }
+    }
+
+    #[test]
+    fn dispatch_dry_run_sem_credenciais_retorna_1() {
+        let code = dispatch(&args(&["ali-coins", "--dry-run", "--json"]));
+        assert_eq!(code, ExitCode::from(1));
+    }
 }

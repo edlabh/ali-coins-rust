@@ -693,6 +693,37 @@ mod tests {
     use ali_coins_browser::mock::{MockDriver, MockPageSpec};
 
     #[tokio::test]
+    async fn gaveta_sem_botao_retorna_false() {
+        let driver = MockDriver::new(vec![MockPageSpec::default()]);
+        let browser = driver
+            .launch(&LaunchOptions::default())
+            .await
+            .expect("launch");
+        let page = browser.new_page().await.expect("página");
+        let opened = open_task_drawer(&*page, Duration::from_millis(200)).await;
+        assert!(!opened, "sem botão de abertura a gaveta não abre");
+    }
+
+    #[tokio::test]
+    async fn get_drawer_sem_botao_falha_apos_retries() {
+        let driver = MockDriver::new(vec![MockPageSpec::default()]);
+        let browser = driver
+            .launch(&LaunchOptions::default())
+            .await
+            .expect("launch");
+        let page = browser.new_page().await.expect("página");
+        let result = get_drawer_tasks_with_retry(
+            &*browser,
+            &*page,
+            Duration::from_millis(100),
+            Duration::from_millis(50),
+            1,
+        )
+        .await;
+        assert!(matches!(result, Err(TasksError::DrawerMissing)));
+    }
+
+    #[tokio::test]
     async fn pagina_fechada_e_recriada_na_central_mobile() {
         let driver = MockDriver::new(vec![MockPageSpec::default(), MockPageSpec::default()]);
         let browser = driver
