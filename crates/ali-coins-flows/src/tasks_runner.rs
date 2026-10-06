@@ -771,6 +771,79 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn runner_respeita_teto_de_acoes() {
+        let tasks = json!([
+            task_json("Tarefa A", "COLLECT", None),
+            task_json("Tarefa B", "COLLECT", None),
+            task_json("Tarefa C", "COLLECT", None),
+        ]);
+        let driver = MockDriver::new(vec![MockPageSpec {
+            visible_selectors: vec![".e2e_task".to_string()],
+            eval_contains: vec![
+                (
+                    "getBoundingClientRect().height > 100".to_string(),
+                    json!(true),
+                ),
+                ("els.findIndex".to_string(), json!(0)),
+                ("btn.click(); return true;".to_string(), json!(true)),
+                (
+                    "document.querySelectorAll('.e2e_normal_task')".to_string(),
+                    tasks,
+                ),
+            ],
+            ..MockPageSpec::default()
+        }]);
+        let browser = driver.launch(&LaunchOptions::default()).await.unwrap();
+        let page = browser.new_page().await.unwrap();
+        let options = TasksOptions {
+            max_actions: 1,
+            max_attempts: 2,
+            open_drawer_timeout: Duration::from_millis(200),
+            ..TasksOptions::default()
+        };
+        let run = run_tasks(&*page, &*browser, &options)
+            .await
+            .expect("runner");
+        assert_eq!(run.actions, 1, "teto de ações deve encerrar a rodada");
+    }
+
+    #[tokio::test]
+    async fn runner_ignora_tarefa_exclusiva_do_app() {
+        let tasks = json!([task_json("Daily quiz challenge", "GO", None)]);
+        let driver = MockDriver::new(vec![MockPageSpec {
+            visible_selectors: vec![".e2e_task".to_string()],
+            eval_contains: vec![
+                (
+                    "getBoundingClientRect().height > 100".to_string(),
+                    json!(true),
+                ),
+                (
+                    "document.querySelectorAll('.e2e_normal_task')".to_string(),
+                    tasks,
+                ),
+            ],
+            ..MockPageSpec::default()
+        }]);
+        let browser = driver.launch(&LaunchOptions::default()).await.unwrap();
+        let page = browser.new_page().await.unwrap();
+        let options = TasksOptions {
+            max_actions: 3,
+            open_drawer_timeout: Duration::from_millis(200),
+            ..TasksOptions::default()
+        };
+        let run = run_tasks(&*page, &*browser, &options)
+            .await
+            .expect("runner");
+        assert_eq!(run.actions, 0, "tarefa app-only não deve ser executada");
+        assert_eq!(
+            run.failed_tasks
+                .get("Daily quiz challenge")
+                .map(String::as_str),
+            Some(APP_ONLY_DISABLED_STATUS)
+        );
+    }
+
+    #[tokio::test]
     async fn gaveta_ausente_vira_erro() {
         let driver = MockDriver::new(vec![MockPageSpec::default()]);
         let browser = driver.launch(&LaunchOptions::default()).await.unwrap();
