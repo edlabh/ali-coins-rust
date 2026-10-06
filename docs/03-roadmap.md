@@ -125,12 +125,13 @@ Escopo: multi-conta sequencial com atrasos/backoff/notificações por conta; Doc
 
 ## Fase 6 — Operação paralela permanente e release estável (14 dias de observação)
 
-**Status: iniciada (2026-09-30), reiniciada em 06/10.** Decisão de 06/10
+**Status: iniciada (2026-09-30); observação suspensa.** Decisão de 06/10
 ([ADR-0007](adr/0007-operacao-paralela-permanente.md)): **os dois projetos
 continuam ativos em caráter permanente, em repositórios separados — não há corte
-nem desligamento do Node.** A janela de observação de **06/10 a 19/10** atesta
-estabilidade/paridade antes da primeira release estável do port; acompanhamento
-em [`07-fase6-observacao.md`](07-fase6-observacao.md).
+nem desligamento do Node.** O cron do port está **pausado por decisão do
+operador** desde 02/10; a janela de 14 dias (para a primeira release estável do
+port) começa a contar na reativação, acompanhada em
+[`07-fase6-observacao.md`](07-fase6-observacao.md).
 
 **Entregáveis**
 - Período paralelo: Node e Rust rodando diariamente (contas distintas) por 14 dias.

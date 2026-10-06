@@ -1,9 +1,10 @@
 # Fase 6 — Observação paralela Node × Rust
 
-> **Incidente (06/10):** a linha do cron Rust apareceu **comentada** no crontab
-> entre 02/10 e 06/10, então o port **não executou nos dias 3, 4 e 5**. A linha
-> foi restaurada em 06/10 às 11:21 UTC e a **contagem de 14 dias consecutivos
-> reinicia em 06/10** (nova janela: 06/10 a 19/10).
+> **Pausa do cron (02/10):** o agendamento do Rust foi **desativado por decisão
+> do operador** em 02/10 (linha comentada no crontab), então o port não executou
+> nos dias 3, 4 e 5 (e segue pausado em 06/10). O Node permanece ativo. A janela
+> de observação fica **suspensa** até a reativação do cron; a contagem de 14 dias
+> consecutivos começa no primeiro dia após a reativação.
 
 **Janela proposta:** 2026-10-01 a 2026-10-14 (14 dias), com os dois crons
 intactos:
@@ -59,10 +60,10 @@ ssh ubuntu@136.248.83.112 \
 | 2026-10-01 | 0 (12m23s) | 3321 (+91: check-in +40 / tarefas +51) | 0 (12m22s) | 1130 (+12: check-in +1 / tarefas +11) | Node: coletou próprio; Rust: `alreadyCollected=false` (coletou próprio) | Node: `Daily check-in +1`; Rust: 3 tarefas app-only desativadas, +11 | Nenhuma; ambos `exit=0`, sem travas |
 | 2026-10-02 | 0 | 3442 (+101: check-in +40 / tarefas +61) | 0 (32m38s) | 1207 (+32: check-in +1 / tarefas +31) | Rust: `alreadyCollected=false` (coletou próprio; streak 6) | Node: tudo concluído; Rust: Explore sponsored 2/2, recently viewed, recap, Super discounts **2/3**; surpresa falhou; **Search e Coupons ficaram pendentes** | ⚠️ Gaveta travou às 11:59 (2 reloads + `Falha persistente`); recuperação segurou, mas o fim da etapa perdeu 2 tarefas. Surpresa sem progresso (`tracking=62->0`) — bloqueio do host, igual ao oráculo |
 | 2026-10-02 | | | | | | | |
-| 2026-10-03 | 0 | +96/+57 (2 contas) | — | — | — | — | ❌ **Rust não executou** — linha do cron estava **comentada** no crontab (detectado em 06/10; restaurada 11:21 UTC) |
-| 2026-10-04 | 0 | +96/+57 (2 contas) | — | — | — | — | ❌ **Rust não executou** (cron comentado) |
-| 2026-10-05 | 0 | +96/+57 (2 contas) | — | — | — | — | ❌ **Rust não executou** (cron comentado) |
-| 2026-10-06 | 0 | +96/+96 (2 contas) | (executando) | | | | 🔧 Cron **restaurado** às 11:21 UTC; run de hoje dispara 11:30 — **reinício da contagem de 14 dias** |
+| 2026-10-03 | 0 | +96/+57 (2 contas) | — | — | — | — | ⏸️ **Cron Rust pausado por decisão do operador** |
+| 2026-10-04 | 0 | +96/+57 (2 contas) | — | — | — | — | ⏸️ Cron Rust pausado (operador) |
+| 2026-10-05 | 0 | +96/+57 (2 contas) | — | — | — | — | ⏸️ Cron Rust pausado (operador) |
+| 2026-10-06 | 0 | +96/+96 (2 contas) | — | — | — | — | ⏸️ Cron Rust mantido pausado (operador); janela aguardando reativação |
 | 2026-10-07 | | | | | | | |
 | 2026-10-08 | | | | | | | |
 | 2026-10-09 | | | | | | | |
