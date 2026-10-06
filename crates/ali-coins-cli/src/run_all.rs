@@ -1,9 +1,9 @@
 //! Subcomando `all`: check-in + tarefas numa única execução, com um só relatório
 //! e uma única notificação (paridade com `all.js` do oráculo).
 
-use crate::export_import::bootstrap;
+use crate::context::bootstrap;
 use ali_coins_browser::cdp::CdpDriver;
-use ali_coins_browser::driver::{BrowserDriver as _, LaunchOptions, NavOptions};
+use ali_coins_browser::driver::{BrowserDriver, LaunchOptions, NavOptions};
 use ali_coins_browser::launch::{ChromiumArgsInput, build_chromium_args, pixel7_profile};
 use ali_coins_core::lock::{LockError, LockOptions, acquire};
 use ali_coins_core::notify::{
@@ -205,10 +205,25 @@ fn notify_lock_failure(
 
 /// `ali-coins all [--account <id>] [--json] [--force]`
 pub fn run(args: &[String]) -> StdExitCode {
-    let json = has_flag(args, "--json");
-    let Some((base_dir, env, config, accounts)) = bootstrap() else {
+    let Some(ctx) = bootstrap() else {
         return StdExitCode::from(1);
     };
+    run_with_context(args, ctx, &CdpDriver::new())
+}
+
+/// Núcleo do fluxo (driver injetável nos testes).
+pub(crate) fn run_with_context(
+    args: &[String],
+    ctx: crate::context::CliContext,
+    driver: &dyn BrowserDriver,
+) -> StdExitCode {
+    let crate::context::CliContext {
+        base_dir,
+        env,
+        config,
+        accounts,
+    } = ctx;
+    let json = has_flag(args, "--json");
     // Modo multi-conta (Fase 5): mais de uma conta configurada ou `--all` explícito.
     if accounts.len() > 1 || has_flag(args, "--all") {
         return crate::run_multi::run(args);
@@ -331,7 +346,6 @@ pub fn run(args: &[String]) -> StdExitCode {
                 force_no_sandbox: false,
                 low_memory: None,
             });
-            let driver = CdpDriver::new();
             let launch_options = LaunchOptions {
                 headless: config.headless,
                 args: chrome_args,
@@ -866,5 +880,33 @@ mod tests {
         assert!(!should_apply_start_delay(false, 0));
         assert!(!should_apply_start_delay(true, 5000));
         assert!(should_apply_start_delay(false, 5000));
+    }
+
+    #[test]
+    fn falha_de_navegacao_retorna_exit_1() {
+        use super::*;
+        use ali_coins_browser::mock::{MockDriver, MockPageSpec};
+        use ali_coins_core::config::EnvSource;
+        let dir = tempfile::tempdir().expect("tempdir");
+        let ctx = crate::context::context_from(
+            dir.path().to_path_buf(),
+            EnvSource::from_pairs([
+                ("ALI_USER", "user@example.com"),
+                ("ALI_PASSWORD", "senha"),
+                ("SESSION_SECRET", "0123456789abcdef0123456789abcdef"),
+                ("TELEGRAM_ENABLED", "false"),
+                ("NAV_TIMEOUT", "1200"),
+                ("NAV_TIMEOUT_SHORT", "800"),
+                ("ELEMENT_TIMEOUT", "300"),
+                ("SELECTOR_TIMEOUT", "300"),
+            ]),
+        )
+        .expect("contexto");
+        let mock = MockDriver::new(vec![MockPageSpec {
+            fail_gotos: 8,
+            ..MockPageSpec::default()
+        }]);
+        let code = run_with_context(&["all".to_string(), "--json".to_string()], ctx, &mock);
+        assert_eq!(code, StdExitCode::from(1));
     }
 }

@@ -6,6 +6,7 @@
 #![forbid(unsafe_code)]
 
 mod checkin_parity;
+mod context;
 mod export_import;
 mod notify_test;
 mod report_render;

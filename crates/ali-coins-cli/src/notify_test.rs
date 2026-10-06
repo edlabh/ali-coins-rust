@@ -1,6 +1,6 @@
 //! Subcomando `notify-test`: envia uma mensagem de teste pelo Telegram.
 
-use crate::export_import::bootstrap;
+use crate::context::bootstrap;
 use ali_coins_core::notify::{
     SafeHttpClient, TelegramConfig, TelegramContext, TelegramEvent, build_message, send_telegram,
 };
@@ -10,9 +10,17 @@ use std::time::Duration;
 
 /// `ali-coins notify-test`
 pub fn run(_args: &[String]) -> StdExitCode {
-    let Some((_base_dir, _env, config, accounts)) = bootstrap() else {
+    let Some(ctx) = bootstrap() else {
         return StdExitCode::from(1);
     };
+    run_with_context(ctx)
+}
+
+/// Núcleo do subcomando (contexto injetável nos testes).
+pub(crate) fn run_with_context(ctx: crate::context::CliContext) -> StdExitCode {
+    let crate::context::CliContext {
+        config, accounts, ..
+    } = ctx;
     if !config.telegram_enabled {
         logging::global().error("TELEGRAM_ENABLED não está ativo no credentials.env.", &[]);
         return StdExitCode::from(u8::try_from(ExitCode::Failure.as_i32()).unwrap_or(1));
@@ -78,5 +86,27 @@ fn notify_host(config: &ali_coins_core::config::Config) -> String {
         ali_coins_core::lock::hostname()
     } else {
         config.notify_host_label.clone()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ali_coins_core::config::EnvSource;
+
+    #[test]
+    fn telegram_desativado_retorna_1() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let ctx = crate::context::context_from(
+            dir.path().to_path_buf(),
+            EnvSource::from_pairs([
+                ("ALI_USER", "user@example.com"),
+                ("ALI_PASSWORD", "senha"),
+                ("SESSION_SECRET", "0123456789abcdef0123456789abcdef"),
+            ]),
+        )
+        .expect("contexto");
+        let code = run_with_context(ctx);
+        assert_eq!(code, StdExitCode::from(1));
     }
 }

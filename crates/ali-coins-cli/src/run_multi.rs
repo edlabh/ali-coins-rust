@@ -7,7 +7,7 @@
 //! manter o isolamento exato da execução de conta única; o processo pai apenas
 //! orquestra, agrega e notifica.
 
-use crate::export_import::bootstrap;
+use crate::context::bootstrap;
 use ali_coins_core::config::{Account, EnvSource};
 use ali_coins_core::exit::ExitCode;
 use ali_coins_core::notify::telegram::{
@@ -418,7 +418,13 @@ pub fn run(args: &[String]) -> std::process::ExitCode {
     use std::process::ExitCode as StdExitCode;
     let json = args.iter().any(|arg| arg == "--json");
     let force = args.iter().any(|arg| arg == "--force" || arg == "-f");
-    let Some((_base_dir, env, config, accounts)) = bootstrap() else {
+    let Some(crate::context::CliContext {
+        env,
+        config,
+        accounts,
+        ..
+    }) = bootstrap()
+    else {
         return StdExitCode::from(1);
     };
     if accounts.is_empty() {

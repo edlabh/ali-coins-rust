@@ -4,9 +4,9 @@
 //! launch + Pixel 7 + bloqueio de recursos) → `run_checkin` → salvar sessão →
 //! relatório `unified_report` (JSON ou texto) → exit codes 0/2/5.
 
-use crate::export_import::bootstrap;
+use crate::context::bootstrap;
 use ali_coins_browser::cdp::CdpDriver;
-use ali_coins_browser::driver::{BrowserDriver as _, LaunchOptions};
+use ali_coins_browser::driver::{BrowserDriver, LaunchOptions};
 use ali_coins_browser::launch::{ChromiumArgsInput, build_chromium_args, pixel7_profile};
 use ali_coins_core::lock::{LockError, LockOptions, acquire};
 use ali_coins_core::notify::{
@@ -44,10 +44,25 @@ fn flag_value<'a>(args: &'a [String], name: &str) -> Option<&'a str> {
 
 /// `ali-coins checkin [--account <id>] [--json] [--force]`
 pub fn run(args: &[String]) -> StdExitCode {
-    let json = has_flag(args, "--json");
-    let Some((base_dir, env, config, accounts)) = bootstrap() else {
+    let Some(ctx) = bootstrap() else {
         return StdExitCode::from(1);
     };
+    run_with_context(args, ctx, &CdpDriver::new())
+}
+
+/// Núcleo do fluxo (driver injetável nos testes).
+pub(crate) fn run_with_context(
+    args: &[String],
+    ctx: crate::context::CliContext,
+    driver: &dyn BrowserDriver,
+) -> StdExitCode {
+    let crate::context::CliContext {
+        base_dir,
+        env,
+        config,
+        accounts,
+    } = ctx;
+    let json = has_flag(args, "--json");
     let account = if let Some(selector) = flag_value(args, "--account") {
         let parsed_index = selector.parse::<usize>().ok();
         let found = accounts.iter().find(|account| {
@@ -135,7 +150,6 @@ pub fn run(args: &[String]) -> StdExitCode {
                 force_no_sandbox: false,
                 low_memory: None,
             });
-            let driver = CdpDriver::new();
             let launch_options = LaunchOptions {
                 headless: config.headless,
                 args,
@@ -522,5 +536,51 @@ fn notify_host(config: &ali_coins_core::config::Config) -> String {
         ali_coins_core::lock::hostname()
     } else {
         config.notify_host_label.clone()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ali_coins_browser::mock::{MockDriver, MockPageSpec};
+    use ali_coins_core::config::EnvSource;
+
+    fn ctx_teste(dir: &std::path::Path) -> crate::context::CliContext {
+        crate::context::context_from(
+            dir.to_path_buf(),
+            EnvSource::from_pairs([
+                ("ALI_USER", "user@example.com"),
+                ("ALI_PASSWORD", "senha"),
+                ("SESSION_SECRET", "0123456789abcdef0123456789abcdef"),
+                ("TELEGRAM_ENABLED", "false"),
+                ("NAV_TIMEOUT", "1200"),
+                ("NAV_TIMEOUT_SHORT", "800"),
+                ("ELEMENT_TIMEOUT", "300"),
+                ("SELECTOR_TIMEOUT", "300"),
+            ]),
+        )
+        .expect("contexto de teste")
+    }
+
+    #[test]
+    fn lock_ativo_retorna_exit_3() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let ctx = ctx_teste(dir.path());
+        let _guard =
+            acquire(&LockOptions::new(ctx.accounts[0].lock_path.clone())).expect("lock do teste");
+        let code = run_with_context(&["checkin".to_string()], ctx, &MockDriver::new(vec![]));
+        assert_eq!(code, StdExitCode::from(3));
+    }
+
+    #[test]
+    fn falha_de_navegacao_retorna_exit_1() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let ctx = ctx_teste(dir.path());
+        let mock = MockDriver::new(vec![MockPageSpec {
+            fail_gotos: 8,
+            ..MockPageSpec::default()
+        }]);
+        let code = run_with_context(&["checkin".to_string(), "--json".to_string()], ctx, &mock);
+        assert_eq!(code, StdExitCode::from(1));
     }
 }

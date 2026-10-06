@@ -1,8 +1,8 @@
 //! Subcomando `tasks`: executa o painel "Ganhe mais moedas" (runner conservador).
 
-use crate::export_import::bootstrap;
+use crate::context::bootstrap;
 use ali_coins_browser::cdp::CdpDriver;
-use ali_coins_browser::driver::{BrowserDriver as _, LaunchOptions};
+use ali_coins_browser::driver::{BrowserDriver, LaunchOptions};
 use ali_coins_browser::launch::{ChromiumArgsInput, build_chromium_args};
 use ali_coins_core::lock::{LockError, LockOptions, acquire};
 use ali_coins_core::notify::telegram::detect_imported_session_expired;
@@ -40,10 +40,25 @@ fn notify_host(config: &ali_coins_core::config::Config) -> String {
 
 /// `ali-coins tasks [--account <id>] [--json] [--force]`
 pub fn run(args: &[String]) -> StdExitCode {
-    let json = has_flag(args, "--json");
-    let Some((base_dir, env, config, accounts)) = bootstrap() else {
+    let Some(ctx) = bootstrap() else {
         return StdExitCode::from(1);
     };
+    run_with_context(args, ctx, &CdpDriver::new())
+}
+
+/// Núcleo do fluxo (driver injetável nos testes).
+pub(crate) fn run_with_context(
+    args: &[String],
+    ctx: crate::context::CliContext,
+    driver: &dyn BrowserDriver,
+) -> StdExitCode {
+    let crate::context::CliContext {
+        base_dir,
+        env,
+        config,
+        accounts,
+    } = ctx;
+    let json = has_flag(args, "--json");
     let account = &accounts[0];
 
     let lock_options = LockOptions {
@@ -108,7 +123,6 @@ pub fn run(args: &[String]) -> StdExitCode {
                 force_no_sandbox: false,
                 low_memory: None,
             });
-            let driver = CdpDriver::new();
             let launch_options = LaunchOptions {
                 headless: config.headless,
                 args,
@@ -371,4 +385,28 @@ pub fn run(args: &[String]) -> StdExitCode {
             },
             |code| StdExitCode::from(u8::try_from(code).unwrap_or(1)),
         )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ali_coins_browser::mock::MockDriver;
+    use ali_coins_core::config::EnvSource;
+
+    #[test]
+    fn sem_sessao_retorna_exit_1() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let ctx = crate::context::context_from(
+            dir.path().to_path_buf(),
+            EnvSource::from_pairs([
+                ("ALI_USER", "user@example.com"),
+                ("ALI_PASSWORD", "senha"),
+                ("SESSION_SECRET", "0123456789abcdef0123456789abcdef"),
+                ("TELEGRAM_ENABLED", "false"),
+            ]),
+        )
+        .expect("contexto");
+        let code = run_with_context(&["tasks".to_string()], ctx, &MockDriver::new(vec![]));
+        assert_eq!(code, StdExitCode::from(1));
+    }
 }

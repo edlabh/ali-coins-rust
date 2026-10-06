@@ -240,3 +240,36 @@ pub fn render_unified(payload: &Value, checkin: Option<&CheckinInput>, masked_us
     }
     log("===============================================================\n");
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ali_coins_core::config::EnvSource;
+
+    #[test]
+    fn renderiza_relatorios_minimos_sem_panico() {
+        render_checkin(&CheckinInput::default());
+        render_tasks(&TasksInput::default());
+        let payload = serde_json::json!({
+            "type": "unified_report",
+            "checkin": { "alreadyCollected": true, "streakDays": 1, "totalBalance": "10" },
+            "tasks": null
+        });
+        render_unified(&payload, None, "fu***@example.com");
+        let payload2 = serde_json::json!({
+            "meta": {
+                "finalBalance": "10 moedas",
+                "totalCoinsGained": 2,
+                "checkinCoinsGained": 1,
+                "tasksCoinsGained": 1
+            }
+        });
+        render_unified(
+            &payload2,
+            Some(&CheckinInput::default()),
+            "fu***@example.com",
+        );
+        // Mantém a assinatura de `EnvSource` disponível para futuros casos.
+        let _ = EnvSource::default();
+    }
+}

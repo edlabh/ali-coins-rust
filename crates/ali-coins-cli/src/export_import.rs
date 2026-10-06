@@ -1,6 +1,6 @@
 //! Subcomandos `export-session` e `import-session` (equivalente às CLIs do oráculo).
 
-use ali_coins_core::config::{Config, EnvSource, load_accounts};
+use crate::context::bootstrap;
 use ali_coins_core::secure_fs::safe_write_file;
 use ali_coins_core::session::{
     SessionOptions, export_session_token, import_session_token, migrate_legacy_session,
@@ -43,36 +43,6 @@ fn selected_accounts<'a>(
     Ok(accounts.iter().collect())
 }
 
-pub(crate) fn bootstrap() -> Option<(
-    PathBuf,
-    EnvSource,
-    Config,
-    Vec<ali_coins_core::config::Account>,
-)> {
-    let base_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    let credentials = base_dir.join("credentials.env");
-    if credentials.exists() {
-        let _ = dotenvy::from_path(&credentials);
-    }
-    let env = EnvSource::from_current_process();
-    let config = match Config::load(&env, &base_dir, true, None, None) {
-        Ok(config) => config,
-        Err(error) => {
-            eprintln!("Falha na validação das variáveis de configuração em credentials.env:");
-            for issue in error.issues() {
-                eprintln!(" • {}: {}", issue.path, issue.message);
-            }
-            return None;
-        }
-    };
-    let accounts = load_accounts(&env, &base_dir);
-    if accounts.is_empty() {
-        eprintln!("Nenhuma conta configurada (ALI_USER/ALI_USER_N ou accounts.json).");
-        return None;
-    }
-    Some((base_dir, env, config, accounts))
-}
-
 fn resolve_account<'a>(
     accounts: &'a [ali_coins_core::config::Account],
     selector: &str,
@@ -103,7 +73,13 @@ pub fn run_export(args: &[String]) -> ExitCode {
     if has_flag(args, "--rotate") {
         return run_rotate(args);
     }
-    let Some((base_dir, env, _config, accounts)) = bootstrap() else {
+    let Some(crate::context::CliContext {
+        base_dir,
+        env,
+        config: _config,
+        accounts,
+    }) = bootstrap()
+    else {
         return ExitCode::from(1);
     };
     let show_token = has_flag(args, "--show-token");
@@ -171,7 +147,13 @@ pub fn run_export(args: &[String]) -> ExitCode {
 
 /// `ali-coins export-session --rotate [--all] [--account <id>] [--new-secret-from-env=VAR]`
 fn run_rotate(args: &[String]) -> ExitCode {
-    let Some((base_dir, env, _config, accounts)) = bootstrap() else {
+    let Some(crate::context::CliContext {
+        base_dir,
+        env,
+        config: _config,
+        accounts,
+    }) = bootstrap()
+    else {
         return ExitCode::from(1);
     };
     let selected = match selected_accounts(args, &accounts) {
@@ -250,7 +232,13 @@ fn run_rotate(args: &[String]) -> ExitCode {
 
 /// `ali-coins import-session --migrate [--all] [--account <id>] [--json]`
 fn run_migrate(args: &[String]) -> ExitCode {
-    let Some((base_dir, env, _config, accounts)) = bootstrap() else {
+    let Some(crate::context::CliContext {
+        base_dir,
+        env,
+        config: _config,
+        accounts,
+    }) = bootstrap()
+    else {
         return ExitCode::from(1);
     };
     let json = has_flag(args, "--json");
@@ -318,7 +306,13 @@ pub fn run_import(args: &[String]) -> ExitCode {
     if has_flag(args, "--migrate") {
         return run_migrate(args);
     }
-    let Some((base_dir, env, _config, accounts)) = bootstrap() else {
+    let Some(crate::context::CliContext {
+        base_dir,
+        env,
+        config: _config,
+        accounts,
+    }) = bootstrap()
+    else {
         return ExitCode::from(1);
     };
     let plaintext = has_flag(args, "--plaintext");
