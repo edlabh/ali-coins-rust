@@ -73,15 +73,23 @@ pub fn run_export(args: &[String]) -> ExitCode {
     if has_flag(args, "--rotate") {
         return run_rotate(args);
     }
-    let Some(crate::context::CliContext {
+    let Some(ctx) = bootstrap() else {
+        return ExitCode::from(1);
+    };
+    run_export_with_context(args, ctx)
+}
+
+/// Núcleo do `export-session` (contexto injetável nos testes).
+pub(crate) fn run_export_with_context(
+    args: &[String],
+    ctx: crate::context::CliContext,
+) -> ExitCode {
+    let crate::context::CliContext {
         base_dir,
         env,
         config: _config,
         accounts,
-    }) = bootstrap()
-    else {
-        return ExitCode::from(1);
-    };
+    } = ctx;
     let show_token = has_flag(args, "--show-token");
 
     let selected: Vec<&ali_coins_core::config::Account> = if has_flag(args, "--all") {
@@ -147,15 +155,23 @@ pub fn run_export(args: &[String]) -> ExitCode {
 
 /// `ali-coins export-session --rotate [--all] [--account <id>] [--new-secret-from-env=VAR]`
 fn run_rotate(args: &[String]) -> ExitCode {
-    let Some(crate::context::CliContext {
+    let Some(ctx) = bootstrap() else {
+        return ExitCode::from(1);
+    };
+    run_rotate_with_context(args, ctx)
+}
+
+/// Núcleo do `--rotate` (contexto injetável nos testes).
+pub(crate) fn run_rotate_with_context(
+    args: &[String],
+    ctx: crate::context::CliContext,
+) -> ExitCode {
+    let crate::context::CliContext {
         base_dir,
         env,
         config: _config,
         accounts,
-    }) = bootstrap()
-    else {
-        return ExitCode::from(1);
-    };
+    } = ctx;
     let selected = match selected_accounts(args, &accounts) {
         Ok(selected) => selected,
         Err(code) => return code,
@@ -232,15 +248,23 @@ fn run_rotate(args: &[String]) -> ExitCode {
 
 /// `ali-coins import-session --migrate [--all] [--account <id>] [--json]`
 fn run_migrate(args: &[String]) -> ExitCode {
-    let Some(crate::context::CliContext {
+    let Some(ctx) = bootstrap() else {
+        return ExitCode::from(1);
+    };
+    run_migrate_with_context(args, ctx)
+}
+
+/// Núcleo do `--migrate` (contexto injetável nos testes).
+pub(crate) fn run_migrate_with_context(
+    args: &[String],
+    ctx: crate::context::CliContext,
+) -> ExitCode {
+    let crate::context::CliContext {
         base_dir,
         env,
         config: _config,
         accounts,
-    }) = bootstrap()
-    else {
-        return ExitCode::from(1);
-    };
+    } = ctx;
     let json = has_flag(args, "--json");
     let selected = match selected_accounts(args, &accounts) {
         Ok(selected) => selected,
@@ -306,15 +330,23 @@ pub fn run_import(args: &[String]) -> ExitCode {
     if has_flag(args, "--migrate") {
         return run_migrate(args);
     }
-    let Some(crate::context::CliContext {
+    let Some(ctx) = bootstrap() else {
+        return ExitCode::from(1);
+    };
+    run_import_with_context(args, ctx)
+}
+
+/// Núcleo do `import-session` (contexto injetável nos testes).
+pub(crate) fn run_import_with_context(
+    args: &[String],
+    ctx: crate::context::CliContext,
+) -> ExitCode {
+    let crate::context::CliContext {
         base_dir,
         env,
         config: _config,
         accounts,
-    }) = bootstrap()
-    else {
-        return ExitCode::from(1);
-    };
+    } = ctx;
     let plaintext = has_flag(args, "--plaintext");
     let keep_tokens = has_flag(args, "--keep-tokens");
     let expected_user = flag_value(args, "--account")
@@ -467,4 +499,83 @@ fn read_token_file(path: &Path) -> Result<String, String> {
     }
     std::fs::read_to_string(path)
         .map_err(|error| format!("Falha ao ler {}: {error}", path.display()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ali_coins_core::config::EnvSource;
+    use ali_coins_core::session::{
+        SessionOptions, save_session, storage_filter::storage_state_json,
+    };
+
+    const SECRET: &str = "parity-test-secret-0123456789abcdef";
+    const USER: &str = "fulano@example.com";
+
+    fn ctx(dir: &std::path::Path) -> crate::context::CliContext {
+        crate::context::context_from(
+            dir.to_path_buf(),
+            EnvSource::from_pairs([
+                ("ALI_USER", USER),
+                ("ALI_PASSWORD", "senha"),
+                ("SESSION_SECRET", SECRET),
+                ("TELEGRAM_ENABLED", "false"),
+            ]),
+        )
+        .expect("contexto")
+    }
+
+    fn grava_sessao(dir: &std::path::Path) {
+        let options = SessionOptions::with_base_dir(dir.to_path_buf());
+        let env = EnvSource::from_pairs([("SESSION_SECRET", SECRET)]);
+        save_session(
+            &options,
+            dir,
+            &env,
+            storage_state_json(&[("xman_us_t", "auth-value")], &[]),
+            USER,
+        )
+        .expect("save")
+        .expect("gravou");
+    }
+
+    #[test]
+    fn export_sem_sessao_falha() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let code = run_export_with_context(&[], ctx(dir.path()));
+        assert_eq!(code, ExitCode::from(1));
+    }
+
+    #[test]
+    fn export_e_import_roundtrip_pelo_cli() {
+        let dir_a = tempfile::tempdir().expect("dir a");
+        grava_sessao(dir_a.path());
+        let code = run_export_with_context(&["--show-token".to_string()], ctx(dir_a.path()));
+        assert_eq!(code, ExitCode::SUCCESS);
+        let token_path = dir_a.path().join("session_token.txt");
+        assert!(token_path.exists(), "token exportado");
+
+        let dir_b = tempfile::tempdir().expect("dir b");
+        let code = run_import_with_context(
+            &[
+                "--from-file".to_string(),
+                token_path.to_string_lossy().to_string(),
+            ],
+            ctx(dir_b.path()),
+        );
+        assert_eq!(code, ExitCode::SUCCESS);
+        assert!(dir_b.path().join("session.json.enc").exists());
+    }
+
+    #[test]
+    fn import_token_invalido_falha() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let bad = dir.path().join("bad.txt");
+        std::fs::write(&bad, "v3:token-que-nao-decifra").expect("token");
+        let code = run_import_with_context(
+            &["--from-file".to_string(), bad.to_string_lossy().to_string()],
+            ctx(dir.path()),
+        );
+        assert_eq!(code, ExitCode::from(1));
+    }
 }
