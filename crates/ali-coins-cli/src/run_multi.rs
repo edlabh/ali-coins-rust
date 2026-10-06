@@ -633,6 +633,71 @@ mod tests {
     }
 
     #[test]
+    fn espera_por_conta_cobre_backoff_e_delay() {
+        let env = EnvSource::from_pairs([
+            ("ACCOUNT_BACKOFF_BASE_MS", "1000"),
+            ("ACCOUNT_DELAY_MIN_MS", "0"),
+            ("ACCOUNT_DELAY_MAX_MS", "0"),
+        ]);
+        // Sem falhas e sem delay configurado: não espera.
+        assert_eq!(account_wait_ms(0, 0, 0, 0.5, &env), 0);
+        // Sem falhas com delay fixo: só o delay.
+        assert_eq!(account_wait_ms(0, 200, 200, 0.5, &env), 200);
+        // Com falhas: backoff somado ao delay.
+        let wait = account_wait_ms(2, 100, 100, 0.5, &env);
+        assert!(wait >= 100, "backoff deve somar ao delay: {wait}");
+    }
+
+    #[test]
+    fn run_accounts_com_falhas_em_sequencia() {
+        let env = EnvSource::from_pairs([
+            ("ACCOUNT_BACKOFF_BASE_MS", "0"),
+            ("ACCOUNT_DELAY_MIN_MS", "0"),
+            ("ACCOUNT_DELAY_MAX_MS", "0"),
+        ]);
+        let accounts: Vec<Account> = ["a@example.com", "b@example.com", "c@example.com"]
+            .iter()
+            .enumerate()
+            .map(|(index, user)| Account {
+                index,
+                user: (*user).to_string(),
+                masked_user: format!("***{index}"),
+                ..Account::default()
+            })
+            .collect();
+        let mut calls = 0;
+        let executions = run_accounts(&accounts, &env, 0, 0, |account| {
+            calls += 1;
+            if account.user == "a@example.com" {
+                execution(&account.user, 1, Some("erro"))
+            } else {
+                execution(&account.user, 0, None)
+            }
+        });
+        assert_eq!(calls, 3);
+        assert_eq!(executions[0].exit_code, 1);
+        assert_eq!(executions[1].exit_code, 0);
+        assert_eq!(executions[2].exit_code, 0);
+    }
+
+    #[test]
+    fn json_object_end_cobre_strings_e_escaping() {
+        let text = r#"lixo {"a": "} dentro", "b": {"c": 1}} resto"#;
+        let start = text.find('{').expect("abre chave");
+        let end = json_object_end(text, start).expect("fim");
+        assert_eq!(&text[start..end], r#"{"a": "} dentro", "b": {"c": 1}}"#);
+        assert!(json_object_end("sem chaves", 0).is_none());
+    }
+
+    #[test]
+    fn random_fraction_fica_no_intervalo() {
+        for _ in 0..5 {
+            let value = random_fraction();
+            assert!((0.0..1.0).contains(&value), "fração: {value}");
+        }
+    }
+
+    #[test]
     fn extrai_relatorio_do_stdout() {
         let stdout = concat!(
             "{\"level\":30,\"msg\":\"log\"}\n",
