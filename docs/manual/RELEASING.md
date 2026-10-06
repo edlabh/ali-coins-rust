@@ -67,15 +67,27 @@ gh release create "v${VERSION}" "$ARCHIVE" "$ARCHIVE.sha256" \
 
 ## Rollback
 
+**Antes de cada deploy**, crie o ponto de rollback da imagem atual:
+
+```bash
+docker tag ali-coins-rust:latest ali-coins-rust:backup-<AAAA-MM-DD>
+```
+
 ```bash
 # Binário
 install -m 755 ali-coins.bak-<data> ali-coins
 
-# Docker
-docker tag ali-coins-rust:anterior ali-coins-rust:latest
+# Docker (imagem): aponte o wrapper para a imagem anterior e valide
+docker tag ali-coins-rust:backup-<AAAA-MM-DD> ali-coins-rust:latest
+ALI_COINS_IMAGE=ali-coins-rust:latest ./docker-run.sh --dry-run --json
 
 # Sessões e tokens permanecem compatíveis entre versões (ADR-0004).
 ```
+
+Ensaio realizado em **06/10/2026** na VM (`ali-coins-rust:backup-2026-10-01`,
+imagem `9b695e368399`): o `docker-run.sh --dry-run --json` com a imagem de
+backup retornou `valid: true` (exit 0); a tag de ensaio foi removida em seguida
+e o ponto de rollback mantido.
 
 ## Referências Cruzadas
 
