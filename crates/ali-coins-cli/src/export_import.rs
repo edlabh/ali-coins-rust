@@ -568,6 +568,64 @@ mod tests {
     }
 
     #[test]
+    fn rotate_chave_pelo_cli() {
+        const NOVO: &str = "novo-secret-0123456789abcdef-xyz";
+        let dir = tempfile::tempdir().expect("tempdir");
+        grava_sessao(dir.path());
+        let ctx = crate::context::context_from(
+            dir.path().to_path_buf(),
+            EnvSource::from_pairs([
+                ("ALI_USER", USER),
+                ("ALI_PASSWORD", "senha"),
+                ("SESSION_SECRET", SECRET),
+                ("SESSION_SECRET_NEW", NOVO),
+                ("TELEGRAM_ENABLED", "false"),
+            ]),
+        )
+        .expect("contexto");
+        let code = run_rotate_with_context(
+            &[
+                "--rotate".to_string(),
+                "--new-secret-from-env=SESSION_SECRET_NEW".to_string(),
+            ],
+            ctx,
+        );
+        assert_eq!(code, ExitCode::SUCCESS);
+    }
+
+    #[test]
+    fn migrate_legado_pelo_cli() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        std::fs::write(
+            dir.path().join("session.json"),
+            r#"{"cookies":[{"name":"xman_us_t","value":"abc"}]}"#,
+        )
+        .expect("sessão legada");
+        std::fs::write(
+            dir.path().join("session_meta.json"),
+            r#"{"user":"fulano@example.com"}"#,
+        )
+        .expect("meta");
+        let ctx = crate::context::context_from(
+            dir.path().to_path_buf(),
+            EnvSource::from_pairs([
+                ("ALI_USER", USER),
+                ("ALI_PASSWORD", "senha"),
+                ("SESSION_SECRET", SECRET),
+                ("ENCRYPT_LOCAL_SESSION", "true"),
+                ("TELEGRAM_ENABLED", "false"),
+            ]),
+        )
+        .expect("contexto");
+        let code = run_migrate_with_context(&["--migrate".to_string(), "--json".to_string()], ctx);
+        assert_eq!(code, ExitCode::SUCCESS);
+        assert!(
+            dir.path().join("session.json.enc").exists(),
+            "sessão migrada para .enc"
+        );
+    }
+
+    #[test]
     fn import_token_invalido_falha() {
         let dir = tempfile::tempdir().expect("tempdir");
         let bad = dir.path().join("bad.txt");
