@@ -6,7 +6,8 @@ automação de check-in diário e tarefas de moedas do AliExpress com emulação
 
 O projeto Node original é mantido em `reference/ali-coins/` como **oráculo de
 paridade** (não versionado) e o comportamento é validado contra ele por fixtures
-geradas em `tools/parity/`.
+geradas em `tools/parity/`. **Os dois projetos são independentes e permanecem
+ativos em repositórios separados** ([ADR-0007](docs/adr/0007-operacao-paralela-permanente.md)).
 
 ## Recursos Principais
 

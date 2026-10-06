@@ -123,27 +123,27 @@ Escopo: multi-conta sequencial com atrasos/backoff/notificações por conta; Doc
 
 ---
 
-## Fase 6 — Corte e descomissionamento (1 semana + 14 dias de observação)
+## Fase 6 — Operação paralela permanente e release estável (14 dias de observação)
 
-**Status: iniciada (2026-09-30).** Janela de observação de
-**01/10 a 14/10** com os dois crons intactos (Node 09:30 UTC, Rust 11:30 UTC);
-acompanhamento em [`07-fase6-observacao.md`](07-fase6-observacao.md)
-(baseline de 30/09, planilha diária e critérios de encerramento). **01/10 (dia 1)**:
-Node `exit=0` em 12m23s (3321 moedas, conta `ag***`) e Rust `exit=0` em 12m22s
-(1130 moedas, conta `edelanoali`), ambos sem travas — contas diferentes, como
-registrado no doc de observação.
+**Status: iniciada (2026-09-30), reiniciada em 06/10.** Decisão de 06/10
+([ADR-0007](adr/0007-operacao-paralela-permanente.md)): **os dois projetos
+continuam ativos em caráter permanente, em repositórios separados — não há corte
+nem desligamento do Node.** A janela de observação de **06/10 a 19/10** atesta
+estabilidade/paridade antes da primeira release estável do port; acompanhamento
+em [`07-fase6-observacao.md`](07-fase6-observacao.md).
 
 **Entregáveis**
-- Período paralelo: Node e Rust rodando no mesmo horário (contas distintas ou alternância controlada) por 14 dias.
-- Relatório de paridade final; decisão de corte; tag `v2.0.0` (Rust).
-- Atualização de README/INSTALL/CLOUD_SESSIONS/TELEGRAM; congelamento do Node (somente hotfix de segurança).
+- Período paralelo: Node e Rust rodando diariamente (contas distintas) por 14 dias.
+- Relatório de paridade final; tag da **primeira release estável do port** (`v1.0.0`).
+- Revisão de README/INSTALL/CLOUD_SESSIONS/TELEGRAM e registro da operação
+  paralela permanente (ADR-0007).
 
 **Critérios de aceite**
 - **Zero divergências** em C-01…C-20 no período (com exceção das flexíveis documentadas).
 - Instalação limpa em VM Linux + Docker do zero, seguindo os guias; atualização de uma instalação existente sem perder sessão.
 - Procedimento de rollback testado (voltar a imagem Node e reutilizar `session.json.enc`).
 
-**Rollback**: reverter imagem/binário; sessões/formato continuam compatíveis por design (ADR-0004).
+**Rollback**: reverter imagem/binário; sessões/formato continuam compatíveis por design (ADR-0004). O Node segue ativo como referência permanente (ADR-0007).
 
 ---
 

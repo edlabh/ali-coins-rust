@@ -10,6 +10,7 @@
 | [0004](0004-cripto-sessao.md) | Cripto/sessão: interoperabilidade bit a bit com o token v3 do Node | Accepted | 2026-09-28 |
 | [0005](0005-observabilidade-logs.md) | Logs/observabilidade: `tracing` JSON + redaction própria; formato humano aproximado | Accepted | 2026-09-28 |
 | [0006](0006-paridade-migracao.md) | Estratégia de migração: incremental com oráculo Node e testes de contrato | Accepted | 2026-09-28 |
+| [0007](0007-operacao-paralela-permanente.md) | Operação paralela permanente: Node e Rust mantidos em repositórios separados (sem corte) | Accepted | 2026-10-06 |
 
 ## Processo
 

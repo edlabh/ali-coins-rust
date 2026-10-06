@@ -52,7 +52,7 @@ O único jeito de provar que "o bot continua coletando moedas" sem testes E2E do
 
 ### Risks
 - **Divergência de ambiente do site**: variabilidade real do AliExpress pode mascarar diferenças. Mitigação: fixtures gravadas + janelas de teste lado a lado no mesmo período.
-- **Drift do upstream**: mitigação por congelamento + triagem mensal do CHANGELOG.
+- **Drift do upstream**: mitigação por oráculo **pinado por fixtures** (`ORACLE_COMMIT`) + triagem do CHANGELOG; os dois projetos evoluem de forma independente (ADR-0007).
 - **Fadiga de paridade**: tempo gasto polindo diferenças irrelevantes (ex.: texto de log humano). Mitigação: classificar cada contrato como **rígido** (C-01, C-05…C-10, C-12, C-14) ou **flexível** (formato de log humano, mensagens internas).
 
 ## Implementation Notes

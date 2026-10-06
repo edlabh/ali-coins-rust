@@ -72,7 +72,7 @@ ssh ubuntu@136.248.83.112 \
 | 2026-10-13 | | | | | | | |
 | 2026-10-14 | | | | | | | |
 
-## Critérios de encerramento (tag `v2.0.0` e desligamento do Node)
+## Critérios de encerramento (primeira release estável do port)
 
 1. 14 dias consecutivos com `exit=0` (ou `exit=2` justificado por "sem ação
    nova") no Rust.
@@ -83,8 +83,8 @@ ssh ubuntu@136.248.83.112 \
    Node deixou pendente.
 5. Nenhum travamento do cron (toda execução termina e grava `exit=`).
 6. Relatório final de paridade anexado a `docs/06-validacao-real.md` e tag
-   `v2.0.0` publicada; só então o cron do Node é desativado (com confirmação do
-   operador).
+   `v1.0.0` publicada. **O Node permanece ativo** em repositório separado
+   (ADR-0007) — não há desligamento.
 
 ## Fora de escopo da janela
 
