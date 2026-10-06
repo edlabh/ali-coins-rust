@@ -309,3 +309,77 @@ mod tests {
         assert!(started.elapsed() < Duration::from_secs(10));
     }
 }
+
+#[cfg(test)]
+mod branches_tests {
+    use super::*;
+    use crate::tasks::parse_task_item;
+    use ali_coins_browser::driver::{BrowserDriver as _, LaunchOptions};
+    use ali_coins_browser::mock::{MockDriver, MockPageSpec};
+    use serde_json::json;
+    use std::collections::HashSet;
+
+    fn task(title: &str, desc: &str, button: &str) -> crate::tasks::TaskItem {
+        parse_task_item(&json!({
+            "index": 0,
+            "title": title,
+            "desc": desc,
+            "btnText": button,
+            "btnStyle": "",
+            "statusText": "",
+            "completedRounds": null,
+            "currentRound": null,
+            "totalRounds": null,
+            "isDone": false,
+            "isActionable": true,
+            "isClaimable": false,
+            "groupId": "",
+            "coins": "+5 moedas",
+            "allText": title
+        }))
+        .expect("task")
+    }
+
+    async fn dispatch(task: &crate::tasks::TaskItem, options: &DispatchOptions) -> DispatchOutcome {
+        let driver = MockDriver::new(vec![MockPageSpec::default()]);
+        let browser = driver
+            .launch(&LaunchOptions::default())
+            .await
+            .expect("launch");
+        let page = browser.new_page().await.expect("page");
+        let mut touched = HashSet::new();
+        execute_task_action(Some(&*browser), &*page, task, 1, options, &mut touched).await
+    }
+
+    #[tokio::test]
+    async fn branches_app_only_e_review() {
+        let options = DispatchOptions::default();
+        for title in [
+            "Complete 1 Merge Boss game order",
+            "Daily quiz challenge",
+            "Avaliar pedido entregue",
+        ] {
+            let outcome = dispatch(&task(title, "", "GO"), &options).await;
+            assert!(outcome.is_special_or_app_only, "{title}");
+        }
+        // Prize Land (regar) também é especial.
+        let outcome = dispatch(&task("Prize Land watering", "regar", "GO"), &options).await;
+        assert!(outcome.is_special_or_app_only);
+    }
+
+    #[tokio::test]
+    async fn branches_busca_e_navegacao_generica() {
+        let options = DispatchOptions {
+            scroll_wait_seconds: 1,
+            task_scroll_max_ms: Duration::from_millis(300),
+            ..DispatchOptions::default()
+        };
+        for (title, desc) in [
+            ("Search for what you love", "use keywords"),
+            ("Explore sponsored items", ""),
+        ] {
+            let outcome = dispatch(&task(title, desc, "GO"), &options).await;
+            assert!(!outcome.is_special_or_app_only, "{title}");
+        }
+    }
+}

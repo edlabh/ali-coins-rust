@@ -854,6 +854,124 @@ mod tests {
         panic!("mtime não foi renovado (idade={last_age}ms)");
     }
 
+    fn escreve_lock(path: &Path, data: &serde_json::Value) {
+        std::fs::write(path, serde_json::to_string_pretty(&data).unwrap()).unwrap();
+    }
+
+    #[test]
+    fn lock_de_outro_host_fica_ativo() {
+        let dir = tempfile::tempdir().unwrap();
+        let options = options_for(dir.path());
+        escreve_lock(
+            &options.path,
+            &serde_json::json!({
+                "pid": std::process::id(),
+                "lockId": "outra-geracao",
+                "createdAt": now_iso(),
+                "host": "host-distante",
+                "platform": "linux"
+            }),
+        );
+        let err = acquire(&options).unwrap_err();
+        assert!(err.is_lock_active(), "lock de outro host deve ficar ativo");
+    }
+
+    #[test]
+    fn lock_de_outro_host_com_force_adquire() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut options = options_for(dir.path());
+        escreve_lock(
+            &options.path,
+            &serde_json::json!({
+                "pid": std::process::id(),
+                "lockId": "outra-geracao",
+                "createdAt": now_iso(),
+                "host": "host-distante",
+                "platform": "linux"
+            }),
+        );
+        options.force = true;
+        let guard = acquire(&options).expect("force deve sobrepor");
+        assert_ne!(guard.data().lock_id, "outra-geracao");
+    }
+
+    fn iso_ha_horas(horas: i64) -> String {
+        (chrono::Utc::now() - chrono::Duration::hours(horas))
+            .format("%Y-%m-%dT%H:%M:%S%.3fZ")
+            .to_string()
+    }
+
+    #[test]
+    fn mtime_recente_renova_mesmo_com_created_antigo() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut options = options_for(dir.path());
+        escreve_lock(
+            &options.path,
+            &serde_json::json!({
+                "pid": std::process::id(),
+                "lockId": "antigo",
+                "createdAt": iso_ha_horas(2),
+                "host": hostname(),
+                "platform": platform_name()
+            }),
+        );
+        // mtime recente (renovação por heartbeat) vence o createdAt antigo.
+        options.stale_timeout_ms = Some(1000);
+        let err = acquire(&options).unwrap_err();
+        assert!(
+            err.is_lock_active(),
+            "mtime recente deve manter o lock ativo"
+        );
+    }
+
+    #[test]
+    fn stale_antigo_remove_mesmo_com_pid_vivo() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut options = options_for(dir.path());
+        escreve_lock(
+            &options.path,
+            &serde_json::json!({
+                "pid": std::process::id(),
+                "lockId": "antigo",
+                "createdAt": iso_ha_horas(2),
+                "host": hostname(),
+                "platform": platform_name()
+            }),
+        );
+        let old = std::time::SystemTime::now() - std::time::Duration::from_secs(7200);
+        std::fs::OpenOptions::new()
+            .write(true)
+            .open(&options.path)
+            .unwrap()
+            .set_modified(old)
+            .unwrap();
+        options.stale_timeout_ms = Some(1000);
+        let guard = acquire(&options).expect("stale pelo tempo");
+        assert_ne!(guard.data().lock_id, "antigo");
+    }
+
+    #[test]
+    fn guarda_nao_remove_lock_de_outra_geracao() {
+        let dir = tempfile::tempdir().unwrap();
+        let options = options_for(dir.path());
+        let guard = acquire(&options).expect("adquiriu");
+        escreve_lock(
+            &options.path,
+            &serde_json::json!({
+                "pid": 999_999,
+                "lockId": "outra",
+                "createdAt": now_iso(),
+                "host": "outro",
+                "platform": "linux"
+            }),
+        );
+        drop(guard);
+        assert!(
+            options.path.exists(),
+            "remoção condicional não deve apagar outra geração"
+        );
+    }
+
     #[test]
     fn recreate_apos_drop() {
         let dir = tempfile::tempdir().unwrap();

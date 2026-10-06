@@ -470,6 +470,25 @@ mod tests {
     }
 
     #[test]
+    fn lock_ativo_retorna_exit_3() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let ctx = crate::context::context_from(
+            dir.path().to_path_buf(),
+            EnvSource::from_pairs([
+                ("ALI_USER", "user@example.com"),
+                ("ALI_PASSWORD", "senha"),
+                ("SESSION_SECRET", "0123456789abcdef0123456789abcdef"),
+                ("TELEGRAM_ENABLED", "false"),
+            ]),
+        )
+        .expect("contexto");
+        let _guard =
+            acquire(&LockOptions::new(ctx.accounts[0].lock_path.clone())).expect("lock do teste");
+        let code = run_with_context(&["tasks".to_string()], ctx, &MockDriver::new(vec![]));
+        assert_eq!(code, StdExitCode::from(3));
+    }
+
+    #[test]
     fn sem_sessao_retorna_exit_1() {
         let dir = tempfile::tempdir().expect("tempdir");
         let ctx = crate::context::context_from(
