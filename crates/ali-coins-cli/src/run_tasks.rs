@@ -390,8 +390,84 @@ pub(crate) fn run_with_context(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ali_coins_browser::mock::MockDriver;
+    use ali_coins_browser::mock::{MockDriver, MockPageSpec};
     use ali_coins_core::config::EnvSource;
+
+    fn task_json(title: &str, button: &str) -> serde_json::Value {
+        serde_json::json!({
+            "index": 0,
+            "title": title,
+            "desc": "",
+            "btnText": button,
+            "btnStyle": "",
+            "statusText": "",
+            "completedRounds": null,
+            "currentRound": null,
+            "totalRounds": null,
+            "isDone": false,
+            "isActionable": button == "GO" || button == "IR",
+            "isClaimable": button == "COLLECT",
+            "groupId": "",
+            "coins": "+5 moedas",
+            "allText": title
+        })
+    }
+
+    #[test]
+    fn painel_mockado_executa_e_retorna_sucesso() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        std::fs::write(
+            dir.path().join("session.json"),
+            r#"{"cookies":[{"name":"xman_us_t","value":"abc"}]}"#,
+        )
+        .expect("sessão");
+        std::fs::write(
+            dir.path().join("session_meta.json"),
+            r#"{"user":"user@example.com"}"#,
+        )
+        .expect("meta");
+        let ctx = crate::context::context_from(
+            dir.path().to_path_buf(),
+            EnvSource::from_pairs([
+                ("ALI_USER", "user@example.com"),
+                ("ALI_PASSWORD", "senha"),
+                ("SESSION_SECRET", "0123456789abcdef0123456789abcdef"),
+                ("ENCRYPT_LOCAL_SESSION", "false"),
+                ("TELEGRAM_ENABLED", "false"),
+                ("NAV_TIMEOUT", "1200"),
+                ("NAV_TIMEOUT_SHORT", "800"),
+                ("ELEMENT_TIMEOUT", "300"),
+                ("SELECTOR_TIMEOUT", "300"),
+            ]),
+        )
+        .expect("contexto");
+        let tasks = serde_json::json!([task_json("Tarefa A", "COLLECT")]);
+        let mock = MockDriver::new(vec![MockPageSpec {
+            storage_state: Some(serde_json::json!({
+                "cookies": [{ "name": "xman_us_t", "value": "abc" }],
+                "origins": []
+            })),
+            visible_selectors: vec![".e2e_task".to_string()],
+            eval_contains: vec![
+                (
+                    "getBoundingClientRect().height > 100".to_string(),
+                    serde_json::json!(true),
+                ),
+                ("els.findIndex".to_string(), serde_json::json!(0)),
+                (
+                    "btn.click(); return true;".to_string(),
+                    serde_json::json!(true),
+                ),
+                (
+                    "document.querySelectorAll('.e2e_normal_task')".to_string(),
+                    tasks,
+                ),
+            ],
+            ..MockPageSpec::default()
+        }]);
+        let code = run_with_context(&["tasks".to_string(), "--json".to_string()], ctx, &mock);
+        assert_eq!(code, StdExitCode::from(0));
+    }
 
     #[test]
     fn sem_sessao_retorna_exit_1() {
