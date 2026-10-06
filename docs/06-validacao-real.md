@@ -291,10 +291,11 @@ desktop, tanto no check-in quanto nas tarefas (como o oráculo):
 - **Auditoria bloqueante**: `cargo audit` sem `|| true` (0 vulnerabilidades; aviso
   de versão yanked apenas), com ferramenta pré-compilada via `taiki-e/install-action`.
 - **Cobertura**: job `coverage` com `cargo llvm-cov --workspace --summary-only` e
-  gate progressivo em **67%** — medido em 06/10: **67,75% de linhas** (15.170
-  linhas, 10.277 cobertas; era 61,74% em 01/10). A partir de 06/10 os fluxos do
+  gate progressivo em **72%** — medido em 06/10: **73,22% de linhas** (15.412
+  linhas, 11.285 cobertas; era 61,74% em 01/10). A partir de 06/10 os fluxos do
   CLI aceitam driver/contexto injetáveis (`run_*_with_context`), o que permitiu
-  testes com `MockDriver` para `all`/`checkin`/`tasks`/`export`/`import`/`notify`. Meta de 80% registrada como pendência: as maiores
+  testes com `MockDriver` para `all`/`checkin`/`tasks`/`export`/`import`/`notify`,
+  além de cenários do runner de tarefas e do fluxo de surpresa. Meta de 80% registrada como pendência: as maiores
   lacunas são o glue de CLI (`run_all`/`run_checkin`/`run_tasks`, que dependem de
   browser real) e o CDP/tarefas DOM (smoke `#[ignore]`).
 - **SBOM**: job `sbom` gera CycloneDX JSON (`cargo cyclonedx --format json`) e
