@@ -120,7 +120,7 @@ jobs:
       # Gate progressivo: impede regressão enquanto a meta de 80% não é
       # atingida (CLI/CDP dependem de browser real; ver docs/03-roadmap.md).
       - name: Cobertura de linhas
-        run: cargo llvm-cov --workspace --fail-under-lines 62 --summary-only
+        run: cargo llvm-cov --workspace --fail-under-lines 67 --summary-only
 
   sbom:
     name: SBOM (CycloneDX)
