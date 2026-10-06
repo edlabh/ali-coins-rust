@@ -803,6 +803,52 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn runner_detecta_aba_nova_apos_clique() {
+        let tasks = json!([task_json("Tarefa A", "COLLECT", None)]);
+        let main = MockPageSpec {
+            visible_selectors: vec![".e2e_task".to_string()],
+            eval_contains: vec![
+                (
+                    "getBoundingClientRect().height > 100".to_string(),
+                    json!(true),
+                ),
+                ("els.findIndex".to_string(), json!(0)),
+                ("btn.click(); return true;".to_string(), json!(true)),
+                (
+                    "document.querySelectorAll('.e2e_normal_task')".to_string(),
+                    tasks,
+                ),
+            ],
+            ..MockPageSpec::default()
+        };
+        let aba_a = MockPageSpec {
+            url: "https://m.aliexpress.com/p/coin-index/channel.html".to_string(),
+            ..MockPageSpec::default()
+        };
+        let aba_b = MockPageSpec {
+            url: "https://m.aliexpress.com/p/coin-index/lucky.html".to_string(),
+            ..MockPageSpec::default()
+        };
+        let aba_c = MockPageSpec {
+            url: "https://m.aliexpress.com/p/coin-index/extra.html".to_string(),
+            ..MockPageSpec::default()
+        };
+        let driver = MockDriver::new(vec![main, aba_a, aba_b, aba_c]);
+        let browser = driver.launch(&LaunchOptions::default()).await.unwrap();
+        let page = browser.new_page().await.unwrap();
+        let options = TasksOptions {
+            max_actions: 2,
+            max_attempts: 2,
+            open_drawer_timeout: Duration::from_millis(200),
+            ..TasksOptions::default()
+        };
+        let run = run_tasks(&*page, &*browser, &options)
+            .await
+            .expect("runner");
+        assert!(run.actions >= 1, "ação deve ser contada mesmo com aba nova");
+    }
+
+    #[tokio::test]
     async fn runner_sem_tarefas_encerra_sem_acoes() {
         let driver = MockDriver::new(vec![MockPageSpec {
             visible_selectors: vec![".e2e_task".to_string()],

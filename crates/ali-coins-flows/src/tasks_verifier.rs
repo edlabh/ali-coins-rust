@@ -760,6 +760,77 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn clique_trusted_usa_coordenadas_ou_fallback() {
+        let driver = MockDriver::new(vec![MockPageSpec {
+            eval_contains: vec![
+                ("els.findIndex".to_string(), json!(0)),
+                (
+                    "btn.scrollIntoView".to_string(),
+                    json!("{\"x\":100,\"y\":200}"),
+                ),
+                ("btn.click(); return true;".to_string(), json!(true)),
+            ],
+            ..MockPageSpec::default()
+        }]);
+        let browser = driver
+            .launch(&LaunchOptions::default())
+            .await
+            .expect("launch");
+        let page = browser.new_page().await.expect("página");
+        assert!(click_task_button_trusted(&*page, "Tarefa A").await);
+    }
+
+    #[tokio::test]
+    async fn clique_trusted_sem_indice_retorna_false() {
+        let driver = MockDriver::new(vec![MockPageSpec::default()]);
+        let browser = driver
+            .launch(&LaunchOptions::default())
+            .await
+            .expect("launch");
+        let page = browser.new_page().await.expect("página");
+        assert!(!click_task_button_trusted(&*page, "Inexistente").await);
+    }
+
+    #[tokio::test]
+    async fn helpers_da_gaveta_respondem_ao_dom() {
+        let driver = MockDriver::new(vec![MockPageSpec {
+            eval_contains: vec![
+                (
+                    "getBoundingClientRect().height > 100".to_string(),
+                    json!(true),
+                ),
+                (
+                    "el.innerText || ''".to_string(),
+                    json!("Tarefa A +5 moedas"),
+                ),
+            ],
+            ..MockPageSpec::default()
+        }]);
+        let browser = driver
+            .launch(&LaunchOptions::default())
+            .await
+            .expect("launch");
+        let page = browser.new_page().await.expect("página");
+        assert!(drawer_open(&*page).await);
+        assert_eq!(drawer_text(&*page).await, "Tarefa A +5 moedas");
+        assert!(wait_drawer_loading(&*page, Duration::from_millis(50)).await);
+    }
+
+    #[tokio::test]
+    async fn loading_preso_respeita_timeout() {
+        let driver = MockDriver::new(vec![MockPageSpec {
+            eval_contains: vec![("common-loading-icon".to_string(), json!(true))],
+            ..MockPageSpec::default()
+        }]);
+        let browser = driver
+            .launch(&LaunchOptions::default())
+            .await
+            .expect("launch");
+        let page = browser.new_page().await.expect("página");
+        assert!(!wait_drawer_loading(&*page, Duration::from_millis(50)).await);
+    }
+
+    #[tokio::test]
     async fn gaveta_sem_botao_retorna_false() {
         let driver = MockDriver::new(vec![MockPageSpec::default()]);
         let browser = driver

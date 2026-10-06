@@ -415,18 +415,30 @@ pub fn build_multi_payload(
 
 /// `ali-coins all --all [--json] [--force]` em modo multi-conta.
 pub fn run(args: &[String]) -> std::process::ExitCode {
+    let Some(ctx) = bootstrap() else {
+        return std::process::ExitCode::from(1);
+    };
+    let force = args.iter().any(|arg| arg == "--force" || arg == "-f");
+    run_with_context(args, &ctx, |account| run_account_child(account, force))
+}
+
+/// Núcleo do modo multi-conta (contexto e runner injetáveis nos testes).
+fn run_with_context<F>(
+    args: &[String],
+    ctx: &crate::context::CliContext,
+    mut runner: F,
+) -> std::process::ExitCode
+where
+    F: FnMut(&Account) -> AccountExecution,
+{
     use std::process::ExitCode as StdExitCode;
     let json = args.iter().any(|arg| arg == "--json");
-    let force = args.iter().any(|arg| arg == "--force" || arg == "-f");
-    let Some(crate::context::CliContext {
+    let crate::context::CliContext {
         env,
         config,
         accounts,
         ..
-    }) = bootstrap()
-    else {
-        return StdExitCode::from(1);
-    };
+    } = ctx;
     if accounts.is_empty() {
         logging::global().error("Nenhuma conta configurada para o modo multi-conta.", &[]);
         return StdExitCode::from(1);
@@ -434,11 +446,11 @@ pub fn run(args: &[String]) -> std::process::ExitCode {
 
     let main_start = Utc::now();
     let executions = run_accounts(
-        &accounts,
-        &env,
+        accounts,
+        env,
         config.account_delay_min_ms,
         config.account_delay_max_ms,
-        |account| run_account_child(account, force),
+        |account| runner(account),
     );
     let main_end = Utc::now();
     let payload = build_multi_payload(&executions, main_start, main_end);
@@ -482,7 +494,7 @@ pub fn run(args: &[String]) -> std::process::ExitCode {
                     url: config.heartbeat_url.clone(),
                     timeout_ms: config.heartbeat_timeout_ms,
                 };
-                let host = crate::run_all::notify_host(&config);
+                let host = crate::run_all::notify_host(config);
                 let action = if matches!(
                     event,
                     TelegramEvent::LockActive
@@ -508,7 +520,7 @@ pub fn run(args: &[String]) -> std::process::ExitCode {
         if config.telegram_enabled {
             let timeout = Duration::from_millis(config.telegram_timeout_ms);
             if let Ok(client) = SafeHttpClient::new(config.allow_private_webhooks, timeout) {
-                let host = crate::run_all::notify_host(&config);
+                let host = crate::run_all::notify_host(config);
                 let chat_id = accounts[0]
                     .telegram_chat_id
                     .clone()
@@ -643,6 +655,48 @@ mod tests {
             vec!["a@example.com", "b@example.com", "c@example.com"]
         );
         assert_eq!(executions.len(), 3);
+    }
+
+    #[test]
+    fn run_with_context_agrega_contas_com_runner_fake() {
+        let env = EnvSource::from_pairs([
+            ("ALI_USER", "user@example.com"),
+            ("ALI_PASSWORD", "senha"),
+            ("SESSION_SECRET", "0123456789abcdef0123456789abcdef"),
+            ("TELEGRAM_ENABLED", "false"),
+            ("HEARTBEAT_ENABLED", "false"),
+        ]);
+        let dir = tempfile::tempdir().expect("tempdir");
+        let ctx = crate::context::context_from(dir.path().to_path_buf(), env).expect("contexto");
+        let sucesso = run_with_context(&["--json".to_string()], &ctx, |account| {
+            execution(&account.user, 0, None)
+        });
+        assert_eq!(sucesso, std::process::ExitCode::from(0));
+        let falha = run_with_context(&[], &ctx, |account| {
+            execution(&account.user, 1, Some("erro simulado"))
+        });
+        assert_eq!(falha, std::process::ExitCode::from(1));
+    }
+
+    #[test]
+    fn run_with_context_sem_contas_retorna_1() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let env = EnvSource::from_pairs([
+            ("ALI_USER", "user@example.com"),
+            ("ALI_PASSWORD", "senha"),
+            ("SESSION_SECRET", "0123456789abcdef0123456789abcdef"),
+            ("TELEGRAM_ENABLED", "false"),
+        ]);
+        let config = ali_coins_core::config::Config::load(&env, dir.path(), false, None, None)
+            .expect("config");
+        let ctx = crate::context::CliContext {
+            base_dir: dir.path().to_path_buf(),
+            env,
+            config,
+            accounts: Vec::new(),
+        };
+        let code = run_with_context(&[], &ctx, |account| execution(&account.user, 0, None));
+        assert_eq!(code, std::process::ExitCode::from(1));
     }
 
     #[test]

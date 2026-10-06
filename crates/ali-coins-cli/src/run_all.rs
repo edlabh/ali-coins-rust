@@ -907,6 +907,8 @@ mod tests {
                 ("SESSION_SECRET", "0123456789abcdef0123456789abcdef"),
                 ("ENCRYPT_LOCAL_SESSION", "false"),
                 ("TELEGRAM_ENABLED", "false"),
+                ("START_DELAY_MIN_MS", "1"),
+                ("START_DELAY_MAX_MS", "1"),
                 ("NAV_TIMEOUT", "1200"),
                 ("NAV_TIMEOUT_SHORT", "800"),
                 ("ELEMENT_TIMEOUT", "300"),
@@ -962,7 +964,16 @@ mod tests {
             ],
             ..MockPageSpec::default()
         }]);
-        let code = run_with_context(&["all".to_string(), "--json".to_string()], ctx, &mock);
+        let code = run_with_context(
+            &[
+                "all".to_string(),
+                "--account".to_string(),
+                "user@example.com".to_string(),
+                "--json".to_string(),
+            ],
+            ctx,
+            &mock,
+        );
         assert_eq!(code, StdExitCode::from(0));
     }
 
@@ -987,6 +998,59 @@ mod tests {
             acquire(&LockOptions::new(ctx.accounts[0].lock_path.clone())).expect("lock do teste");
         let code = run_with_context(&["all".to_string()], ctx, &MockDriver::new(vec![]));
         assert_eq!(code, StdExitCode::from(3));
+    }
+
+    #[test]
+    fn all_com_conta_inexistente_retorna_exit_1() {
+        use super::*;
+        use ali_coins_browser::mock::MockDriver;
+        use ali_coins_core::config::EnvSource;
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let ctx = crate::context::context_from(
+            dir.path().to_path_buf(),
+            EnvSource::from_pairs([
+                ("ALI_USER", "user@example.com"),
+                ("ALI_PASSWORD", "senha"),
+                ("SESSION_SECRET", "0123456789abcdef0123456789abcdef"),
+                ("TELEGRAM_ENABLED", "false"),
+            ]),
+        )
+        .expect("contexto");
+        let code = run_with_context(
+            &[
+                "all".to_string(),
+                "--account".to_string(),
+                "zzz@example.com".to_string(),
+            ],
+            ctx,
+            &MockDriver::new(vec![]),
+        );
+        assert_eq!(code, StdExitCode::from(1));
+    }
+
+    #[tokio::test]
+    async fn fracao_aleatoria_e_heartbeat_desligado() {
+        use super::*;
+        use ali_coins_core::config::EnvSource;
+
+        let value = random_fraction();
+        assert!((0.0..1.0).contains(&value), "fração: {value}");
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let ctx = crate::context::context_from(
+            dir.path().to_path_buf(),
+            EnvSource::from_pairs([
+                ("ALI_USER", "user@example.com"),
+                ("ALI_PASSWORD", "senha"),
+                ("SESSION_SECRET", "0123456789abcdef0123456789abcdef"),
+                ("TELEGRAM_ENABLED", "false"),
+                ("HEARTBEAT_ENABLED", "false"),
+            ]),
+        )
+        .expect("contexto");
+        send_heartbeat_action(&ctx.config, HeartbeatAction::Success, None).await;
+        send_heartbeat_action(&ctx.config, HeartbeatAction::Fail, Some("erro")).await;
     }
 
     #[test]
