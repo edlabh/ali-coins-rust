@@ -3,7 +3,7 @@
 Depende de: `docs/01-avaliacao.md`, `docs/02-arquitetura.md`, `docs/adr/` (ADR-0006 = método).
 
 **Estimativa total**: 10–13 semanas de 1 dev Rust sênior (sem contar o período de observação do corte).
-**Pré-requisito de ambiente**: `rustup` + toolchain **1.85+** (não instalado nesta máquina — aprovação pendente).
+**Pré-requisito de ambiente**: `rustup` + toolchain **1.85+** — **atendido**: toolchain pinada em **1.99.0** (06/10), instalada e usada local/CI/VM.
 
 ---
 
@@ -48,7 +48,7 @@ Escopo: `core::config`, `crypto`, `session`, `lock`, `logging`, `time`, `report`
 
 ## Fase 2 — Camada de browser (1,5–2 semanas)
 
-**Status: em andamento (2026-09-28).** Concluído: políticas de launch, perfil Pixel 7, fronteira `BrowserDriver`/`Browser`/`Page`, `MockDriver` e `CdpDriver` (chromiumoxide: launch, init script stealth, navegação/evaluate/seletores/click/scroll/screenshot, emulação de device). Smoke real pendente de libs do Chromium no host (`playwright install-deps`).
+**Status: concluída (2026-09-28 → 10-01).** Concluído: políticas de launch, perfil Pixel 7, fronteira `BrowserDriver`/`Browser`/`Page`, `MockDriver` e `CdpDriver` (chromiumoxide: launch, init script stealth, navegação/evaluate/seletores/click/scroll/screenshot, emulação de device). **Smoke real executado em 01/10** (libs do Chromium em `~/.local/chromium-libs` + sessão importada; runs reais de check-in/tarefas concluídos), com smoke automatizado `#[ignore]` para ambientes com browser.
 
 Escopo: `browser::cdp` (launch/cascata de args, sanitização de env, low-memory, emulação Pixel 7, init scripts, bloqueio de recursos, contextos/páginas/popups, storageState, cookies) + `diagnostics` (screenshot/trace; vídeo opcional) + `MockDriver`.
 
@@ -174,13 +174,14 @@ port) começa a contar na reativação, acompanhada em
 | Fidelidade do CDP (R2/R3) | Atraso nas fases 2–4 | Spike de 3–5 dias na fase 2 com os helpers críticos antes de prosseguir |
 | Variabilidade do site real | Falsos negativos de paridade | Fixtures gravadas + janelas de execução pareadas |
 | Scope creep (stealth/anti-bot) | Atraso geral | Congelar paridade 1.7.1; backlog separado |
-| Toolchain ausente | Bloqueia fase 0+ | Instalar `rustup` (aprovação pendente) |
+| Toolchain ausente | Bloqueia fase 0+ | **Resolvido**: `rustup` + toolchain **1.99.0** pinada (06/10), usada em local/CI/VM. |
+| Runner `macos-13` retirado | Release Intel quebra/fila infinita | **Corrigido em 06/10/2026**: alvo Intel migrado para `macos-15-intel` (`release.yml`). |
 | Manutenção dupla | Custo | Congelamento do upstream + só hotfixes de segurança |
 
 ## Questões abertas (aprovação)
 
-1. **Autorizar instalação do Rust toolchain** (`rustup`, estável 1.85+) nesta máquina?
+1. ~~**Autorizar instalação do Rust toolchain**~~ — **resolvido**: toolchain 1.99.0 pinada e instalada (06/10).
 2. **Prioridade de plataformas**: Linux (VPS) primeiro e Windows/macOS em fase posterior — **atendido em 02/10/2026**: macOS e Windows receberam manuais (`docs/manual/INSTALL_MACOS.md`, `INSTALL_WINDOWS.md`), wrappers `.ps1`/`.bat`, descoberta de Chromium por SO e jobs de CI/release multi-plataforma.
-3. **Sidecar Playwright** deve ficar só como ferramenta de paridade ou também como fallback opcional no produto?
-4. **Vídeo de diagnóstico** (`PW_VIDEO`): manter paridade completa (screencast CDP) ou aceitar degradação para trace+screenshot na v1 Rust?
-5. **Repositório**: usar este workspace `ali-coins-rust` como repositório novo (o clone do oráculo fica em `reference/`, ignorado pelo git)?
+3. **Sidecar Playwright**: implementado **apenas como ferramenta de paridade** (`reference/`, ignorado pelo git); não há fallback no produto. Reabrir se quiser fallback opcional.
+4. **Vídeo de diagnóstico** (`PW_VIDEO`): implementado como **trace CDP JSON (D-03) + screenshot**; vídeo desligado por padrão (`off`). Reabrir se quiser screencast completo.
+5. ~~**Repositório**~~ — **resolvido**: este workspace é o repositório permanente; o clone do oráculo fica em `reference/` (ADR-0007: operação paralela permanente com o Node).
