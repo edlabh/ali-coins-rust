@@ -64,7 +64,7 @@ ssh ubuntu@136.248.83.112 \
 | 2026-10-04 | 0 | +96/+57 (2 contas) | — | — | — | — | ⏸️ Cron Rust pausado (operador) |
 | 2026-10-05 | 0 | +96/+57 (2 contas) | — | — | — | — | ⏸️ Cron Rust pausado (operador) |
 | 2026-10-06 | 0 | +96/+96 (2 contas) | — | — | — | — | ⏸️ Cron Rust mantido pausado (operador); janela aguardando reativação |
-| 2026-10-07 | | | | | | | |
+| 2026-10-07 | 0 (fim 10:56 UTC) | — | — | — | — | — | ⏸️ Cron Rust pausado; **release `v1.0.0` publicada** (4 alvos) e **imagem v1.0.0 implantada na VM** (dry-run exit 0; rollback `backup-2026-10-01` preservado) |
 | 2026-10-08 | | | | | | | |
 | 2026-10-09 | | | | | | | |
 | 2026-10-10 | | | | | | | |

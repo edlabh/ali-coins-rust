@@ -530,3 +530,24 @@ onde o oráculo funciona.
   `import-session --migrate --json` → `{cookiesCount:1, migrated:true,
   encrypted:true}`; `export-session --rotate` com `SESSION_SECRET_NEW` →
   `[SUCESSO] Rotação de chave concluída` + backup versionado.
+
+## Release v1.0.0 (07/10/2026)
+
+Primeira release estável publicada, encerrando a Fase 5:
+
+- **Dry-run multi-OS** (`workflow_dispatch`, 06/10): 4/4 alvos verdes depois da
+  migração do alvo Intel de `macos-13` (retirado do GitHub Actions) para
+  `macos-15-intel`; o dry-run apenas guarda artefatos, sem criar release.
+- **Release real** (tag `v1.0.0`, 07/10): 4 jobs verdes — Linux x86_64,
+  macOS aarch64, macOS Intel e Windows x86_64 — com 4 tarballs + `.sha256`
+  publicados. Verificação do binário Linux: `ali-coins --version` → `1.0.0`.
+- **Deploy na VM**: fontes sincronizadas no mesmo dia, build de release em
+  **5m07s** (cache quente), imagem `ali-coins-rust:latest` reconstruída e
+  validada com `docker-run.sh --dry-run --json` (**exit 0, `valid: true`**);
+  binário nativo de fallback atualizado.
+- **Rollback**: imagem anterior preservada em
+  `ali-coins-rust:backup-2026-10-01`; a nova geração recebeu a tag
+  `ali-coins-rust:2026-10-07`. Procedimento ensaiado e documentado em
+  `docs/manual/RELEASING.md`.
+- **Cron Rust** segue **pausado por decisão do operador** (observação da Fase 6
+  suspensa); o deploy foi validado sem nenhuma execução em conta real.
