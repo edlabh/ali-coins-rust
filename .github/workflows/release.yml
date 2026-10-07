@@ -32,7 +32,7 @@ jobs:
             target: aarch64-apple-darwin
             binary: ali-coins
             artifact: macos-aarch64
-          - os: macos-13
+          - os: macos-15-intel
             target: x86_64-apple-darwin
             binary: ali-coins
             artifact: macos-x86_64
