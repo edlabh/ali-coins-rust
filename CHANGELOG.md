@@ -6,8 +6,16 @@ e o versionamento [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Não lançado]
 
+## [1.0.0] - 2026-10-07
+
+Primeira release estável: paridade com o oráculo Node nas fases 0–5,
+multi-conta, suporte a macOS/Windows e hardening de CI/cobertura.
+
 ### Adicionado
 
+- **Multi-conta (Fase 5)**: execução sequencial por processo filho
+  (`all --account <user> --json`), lock por conta, backoff/jitter, relatório
+  `multi_account_report` e notificação consolidada (validado só com **mocks**).
 - **macOS e Windows**: suporte oficial com manuais
   (`docs/manual/INSTALL_MACOS.md`, `docs/manual/INSTALL_WINDOWS.md`), wrappers
   PowerShell/BAT (`wrappers/*.ps1`, `wrappers/*.bat`) e agendamento via
@@ -15,14 +23,23 @@ e o versionamento [SemVer](https://semver.org/lang/pt-BR/).
 - **Descoberta de Chromium por SO** (`launch::resolve_chromium_path`): cache do
   Playwright (`PLAYWRIGHT_BROWSERS_PATH` ou padrão por sistema), com
   `ALI_COINS_CHROME` tendo precedência.
+- **Cobertura**: injeção de driver/contexto no CLI (`run_*_with_context`) e
+  testes de fluxo com `MockDriver`; **80,02% de linhas** (`cargo llvm-cov`) com
+  gate progressivo de **79%** no CI.
 - **CI**: job `cross-platform` (macOS + Windows) rodando a suíte.
-- **Release**: artefatos para Linux x86_64, macOS aarch64/x86_64 e Windows x86_64.
+- **CI**: `cargo deny check` bloqueante (licenças/bans/fontes, `deny.toml`).
+- **Release**: artefatos para Linux x86_64, macOS aarch64/x86_64 e Windows x86_64;
+  dry-run multi-OS via `workflow_dispatch` (não cria release).
+- **Operação**: imagem própria `ali-coins-rust` + procedimento de rollback
+  documentado e ensaiado na VM (tag de backup da imagem anterior).
 
 ### Corrigido
 
 - `is_process_alive` no Windows via `tasklist` (lock stale deixa de ser tratado
   como vivo para sempre).
 - Teste de `PW_OUTPUT_DIR` não depende mais de separador Unix.
+- Alvo macOS Intel migrado de `macos-13` (retirado do GitHub Actions) para
+  `macos-15-intel`.
 
 ## [0.1.0] - 2026-09-30
 
@@ -59,4 +76,5 @@ paridade com o oráculo nas fases 0–4 do roadmap.
   travado; valores do extrato sempre exibidos na mensagem; travamento por CDP
   pendurado em página lenta (tetos por chamada).
 
+[1.0.0]: https://github.com/edlabh/ali-coins-rust/releases/tag/v1.0.0
 [0.1.0]: https://github.com/edlabh/ali-coins-rust/releases/tag/v0.1.0

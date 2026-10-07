@@ -110,7 +110,7 @@ Status: success
 📅 Sequência: 5 dias
 💰 Saldo: 1165 moedas
 ⏱️ Duração: 16m 36s
-🖥️ Host: vm-ali-rust (v0.1.0)
+🖥️ Host: vm-ali-rust (v1.0.0)
 ```
 
 ### Exemplo: já coletado
@@ -128,7 +128,7 @@ Status: success
 🔴 ali-coins — 02/10/2026 08:30:00
 ⚠️ Erro: Request timed out
 👤 Conta: ed***@gmail.com
-🖥️ Host: vm-ali-rust (v0.1.0)
+🖥️ Host: vm-ali-rust (v1.0.0)
 ```
 
 ### Aviso de Sessão Remota Expirada
@@ -155,7 +155,7 @@ No port, o fluxo é `ali-coins export-session` / `ali-coins import-session`
 [2] ag***@gmail.com: 08:45 → 08:58
 ⏱️ Duração Total: 28m 10s
 📅 Data: 02/10/2026
-🖥️ Host: vm-ali-rust (v0.1.0)
+🖥️ Host: vm-ali-rust (v1.0.0)
 ```
 
 ## Parâmetros de Linha de Comando (CLI)
